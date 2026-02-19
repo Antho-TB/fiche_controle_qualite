@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+venv/
+ENV/
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Données locales (Bonne pratique : ne pas versionner les données volumineuses ou sensibles)
+data/*
+!data/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# MLOps - MLflow
+mlruns/
+mlruns.db
+
+# Logs
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

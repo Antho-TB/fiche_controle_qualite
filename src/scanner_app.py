@@ -1,0 +1,89 @@
+import sys
+import os
+
+# Ajout du dossier racine au chemin de recherche pour pouvoir importer les modules de src/
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.data_loader import DataLoader
+from src.excel_handler import ExcelHandler
+import logging
+import mlflow
+
+def lancer_session_scan():
+    """
+    Point d'entrée principal de l'application.
+    Coordonne la lecture CSV, l'entrée douchette et la génération Excel.
+    """
+    print("\n" + "="*50)
+    print("      INTERFACE AUTOMATISÉE - SERVICE QUALITÉ")
+    print("="*50)
+    
+    # --- Configuration MLOps (MLflow) ---
+    # On crée une expérience dédiée au suivi des sessions de scan
+    mlflow.set_experiment("Controle_Qualite_Reception")
+    
+    # 1. Initialisation des composants
+    try:
+        loader = DataLoader() # Charge le CSV
+        handler = ExcelHandler() # Prépare la gestion Excel
+    except Exception as e:
+        print(f"[-] Erreur d'initialisation : {e}")
+        return
+
+    print("\n[INFO] Prêt pour le scan.")
+    print("[INFO] Astuce : Utilisez votre douchette sur le code-barre de l'article.")
+    print("[INFO] Tapez 'STOP' pour arrêter la session.\n")
+
+    # On démarre un "run" MLflow pour cette session de travail
+    with mlflow.start_run(run_name=f"Session_{datetime.now().strftime('%Y%m%d_%H%M')}"):
+        # On log le fichier source utilisé
+        mlflow.log_param("csv_source", loader.csv_path)
+        nb_scans = 0
+
+        while True:
+            try:
+                # On attend l'entrée de la douchette (qui simule une saisie clavier + Entrée)
+                code_scanne = input(">>>> SCAN ARTICLES : ").strip()
+                
+                if code_scanne.upper() == 'STOP':
+                    print("\n[FIN] Session terminée. Merci !")
+                    break
+                    
+                if not code_scanne:
+                    continue
+
+                # 2. Recherche de l'article
+                article = loader.chercher_article(code_scanne)
+                
+                if article:
+                    nb_scans += 1
+                    print(f"[OK] Article identifié : {article['designation']}")
+                    print(f"     Référence : {article['ref']}")
+                    
+                    # 3. Génération de la fiche Excel
+                    print("     Génération de la fiche Excel en cours...")
+                    chemin_fiche = handler.generer_fiche(article)
+                    
+                    if chemin_fiche:
+                        print(f"[SUCCÈS] Document créé : {chemin_fiche}")
+                        # On log un événement pour chaque scan réussi
+                        mlflow.log_metric("total_scans_success", nb_scans)
+                    else:
+                        print("[ERREUR] Impossible de sauvegarder le fichier Excel.")
+                else:
+                    print(f"[!] Erreur : Le code '{code_scanne}' est inconnu.")
+                    print("    Vérifiez qu'il s'agit bien d'une référence ou d'un GenCod valide.")
+
+            except KeyboardInterrupt:
+                print("\nArrêt forcé.")
+                break
+            except Exception as e:
+                print(f"\n[!] Une erreur est survenue : {e}")
+        
+        # On log la métrique finale de la session
+        mlflow.log_metric("total_session_scans", nb_scans)
+        mlflow.set_tag("statut", "Complete")
+
+if __name__ == "__main__":
+    from datetime import datetime # Import nécessaire pour le nom du run
+    lancer_session_scan()
