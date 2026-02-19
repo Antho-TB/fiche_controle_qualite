@@ -70,6 +70,16 @@ class DataLoader:
         if resultat.empty:
             resultat = self.df[self.df['ref'] == code]
             
+        # NOUVEAU : Recherche encore plus souple (Fuzzy Matching Léger)
+        # Certains lecteurs ajoutent un préfixe (ex: '3') ou modifient le dernier chiffre.
+        if resultat.empty and len(code) >= 10:
+            # On cherche si une partie significative du code scanné existe dans la base
+            # On prend les chiffres du milieu qui sont les plus fiables
+            coeur_du_code = code[1:11] 
+            resultat = self.df[self.df['ean'].str.contains(coeur_du_code, na=False)]
+            if not resultat.empty:
+                logging.info(f"Article trouvé via recherche du coeur de code ({coeur_du_code})")
+
         if not resultat.empty:
             article = resultat.iloc[0].to_dict()
             logging.info(f"Article trouvé : {article['designation']}")
