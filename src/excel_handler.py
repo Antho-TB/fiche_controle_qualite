@@ -37,17 +37,17 @@ class ExcelHandler:
             wb = openpyxl.load_workbook(self.template_path)
             ws = wb.active # On travaille sur la feuille active
 
-            # --- Saisie des données dans les cellules (basé sur l'analyse visuelle) ---
-            # NOTE pour le junior : ws['Cellule'] permet d'écrire directement.
+            # --- Saisie des données dans les cellules (Corrigé selon retour utilisateur) ---
+            # NOTE : D'après la capture écran, l'en-tête se situe en haut.
             
-            # 1. Référence Article
-            ws['D9'] = article_info['ref']
+            # 1. Date de réception (C4)
+            ws['C4'] = now.strftime("%d/%m/%Y")
             
-            # 2. Désignation Article
-            ws['D10'] = article_info['designation']
+            # 2. Référence Article (B5)
+            ws['B5'] = article_info['ref']
             
-            # 3. Date de réception (Aujourd'hui)
-            ws['D11'] = now.strftime("%d/%m/%Y")
+            # 3. Désignation Article (B6)
+            ws['B6'] = article_info['designation']
             
             # Sauvegarde du nouveau fichier
             wb.save(chemin_sortie)
