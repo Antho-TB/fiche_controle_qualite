@@ -29,3 +29,6 @@ logs/*.log
 .idea/
 *.swp
 *.swo
+
+# Configuration sensible
+.env

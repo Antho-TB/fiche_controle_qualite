@@ -3,3 +3,5 @@ openpyxl
 pypdf
 mlflow
 chardet
+python-dotenv
+requests
