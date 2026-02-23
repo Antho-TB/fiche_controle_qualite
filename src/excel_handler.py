@@ -37,11 +37,10 @@ class ExcelHandler:
             wb = openpyxl.load_workbook(self.template_path)
             ws = wb.active # On travaille sur la feuille active
 
-            # --- Saisie des données dans les cellules (Corrigé selon retour utilisateur) ---
-            # NOTE : D'après la capture écran, l'en-tête se situe en haut.
+            # --- Saisie des données dans les cellules (Ajustement final) ---
             
-            # 1. Date de réception (C4)
-            ws['C4'] = now.strftime("%d/%m/%Y")
+            # 1. Date de réception (F4)
+            ws['F4'] = now.strftime("%d/%m/%Y")
             
             # 2. Référence Article (B5)
             ws['B5'] = article_info['ref']
