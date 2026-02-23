@@ -93,3 +93,33 @@ class PDFExtractor:
                return v
                
         return {"po": "", "lot": ""}
+
+    def archiver_pdfs(self):
+        """
+        Déplace les PDF traités vers un dossier 'archives' 
+        pour ne pas polluer les sessions de contrôle futures.
+        """
+        import time
+        import shutil
+        
+        archive_dir = os.path.join(self.pdf_dir, "archives")
+        if not os.path.exists(archive_dir):
+            os.makedirs(archive_dir)
+            
+        pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith('.pdf')]
+        if not pdf_files:
+            return
+            
+        logging.info(f"Archivage de {len(pdf_files)} PDF(s)...")
+        for file_name in pdf_files:
+            src = os.path.join(self.pdf_dir, file_name)
+            dst = os.path.join(archive_dir, file_name)
+            try:
+                # Si un fichier du même nom existe déjà dans l'archive, on ajoute un timestamp
+                if os.path.exists(dst):
+                    base, ext = os.path.splitext(file_name)
+                    dst = os.path.join(archive_dir, f"{base}_{int(time.time())}{ext}")
+                shutil.move(src, dst)
+            except Exception as e:
+                logging.error(f"Impossible d'archiver {file_name}: {e}")
+

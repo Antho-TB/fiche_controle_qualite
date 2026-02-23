@@ -50,6 +50,13 @@ def lancer_session_scan():
                 
                 if code_scanne.upper() == 'STOP':
                     print("\n[FIN] Session terminée. Merci !")
+                    
+                    # Demander s'il faut nettoyer le dossier
+                    choix = input("Voulez-vous archiver les Packing Lists actuelles pour ne pas les relire demain ? (O/N) : ").strip().upper()
+                    if choix == 'O':
+                        pdf_data.archiver_pdfs()
+                        print("[INFO] Fichiers PDF archivés avec succès dans data/packing_lists/archives.")
+                        
                     break
                     
                 if not code_scanne:
