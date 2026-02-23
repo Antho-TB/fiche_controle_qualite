@@ -6,6 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_loader import DataLoader
 from src.excel_handler import ExcelHandler
+from src.pdf_extractor import PDFExtractor
 import logging
 import mlflow
 
@@ -26,6 +27,8 @@ def lancer_session_scan():
     try:
         loader = DataLoader() # Charge le CSV
         handler = ExcelHandler() # Prépare la gestion Excel
+        pdf_data = PDFExtractor() # Extrait silencieusement les N° de Commande et Lots
+
     except Exception as e:
         print(f"[-] Erreur d'initialisation : {e}")
         return
@@ -57,9 +60,22 @@ def lancer_session_scan():
                 
                 if article:
                     nb_scans += 1
+
+                    # --- NOUVEAU: Extraction d'infos via PDF (Lot + PO) ---
+                    infos_pdf = pdf_data.chercher_infos_pdf(
+                        code_article=code_scanne,
+                        ref_article=article.get('ref', '')
+                    )
+                    article['po'] = infos_pdf.get('po', '')
+                    article['lot'] = infos_pdf.get('lot', '')
+                    # --------------------------------------------------------
+
                     print(f"[OK] Article identifié : {article['designation']}")
                     print(f"     Référence : {article['ref']}")
                     
+                    if article['po']:
+                        print(f"     [PDF] N° Commande : {article['po']} | Lot : {article['lot']}")
+
                     # 3. Génération de la fiche Excel
                     print("     Génération de la fiche Excel en cours...")
                     chemin_fiche = handler.generer_fiche(article)

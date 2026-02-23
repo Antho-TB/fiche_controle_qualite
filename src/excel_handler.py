@@ -47,6 +47,12 @@ class ExcelHandler:
             
             # 3. Désignation Article (B6)
             ws['B6'] = article_info['designation']
+
+            # 4. N° Commande (F5)
+            ws['F5'] = article_info.get('po', '')
+
+            # 5. Lot (F6)
+            ws['F6'] = article_info.get('lot', '')
             
             # Sauvegarde du nouveau fichier
             wb.save(chemin_sortie)
