@@ -91,6 +91,14 @@ def lancer_session_scan():
                         article['lot'] = infos_pdf.get('lot', '')
                         if article['lot']:
                             print(f"     [PDF] Lot trouvé (fallback) : {article['lot']}")
+                    
+                    # Alerte si infos manquantes
+                    if not article['po'] and not article['lot']:
+                        print("     [!] Attention : Ni commande ni lot trouvés pour cet article.")
+                    elif not article['po']:
+                        print("     [!] Attention : Numéro de commande non trouvé.")
+                    elif not article['lot']:
+                        print("     [!] Attention : Numéro de lot non trouvé.")
                     # --------------------------------------------------------
 
                     print(f"[OK] Article identifié : {article['designation']}")
