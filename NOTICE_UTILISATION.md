@@ -5,10 +5,11 @@ Cet outil permet de générer automatiquement vos fiches d'inspection qualité (
 ---
 
 ## 🛠️ ÉTAPE 1 : Préparation (Optionnelle)
-*Si vous avez un fichier PDF de type "Packing List" avec les N° de Commande et N° de Lot :*
+*Si vous avez un fichier PDF de type "Packing List" avec la commande fournisseur :*
 1. Copiez votre fichier PDF.
 2. Collez-le dans le dossier `data/packing_lists`.
-*(L'outil lira automatiquement ces informations pour les ajouter à votre fiche Excel).*
+*(L'outil lira automatiquement le N° de Commande depuis le PDF, puis interrogera Sylob pour récupérer le N° de Lot officiel).*
+
 
 ## 🚀 ÉTAPE 2 : Lancement
 1. Allez dans le dossier du scanner Qualité.

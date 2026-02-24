@@ -73,8 +73,24 @@ def lancer_session_scan():
                         code_article=code_scanne,
                         ref_article=article.get('ref', '')
                     )
-                    article['po'] = infos_pdf.get('po', '')
-                    article['lot'] = infos_pdf.get('lot', '')
+                    po = infos_pdf.get('po', '')
+                    article['po'] = po
+                    
+                    # Récupérer le lot depuis Sylob si on a un PO
+                    lot_sylob = None
+                    if po and hasattr(loader, 'sylob') and loader.sylob:
+                        try:
+                            lot_sylob = loader.sylob.chercher_lot_par_po(po)
+                        except Exception as e:
+                            logging.error(f"Erreur lors de la récupération du lot Sylob: {e}")
+                    
+                    if lot_sylob:
+                        article['lot'] = lot_sylob
+                        print(f"     [Sylob] Lot récupéré : {lot_sylob}")
+                    else:
+                        article['lot'] = infos_pdf.get('lot', '')
+                        if article['lot']:
+                            print(f"     [PDF] Lot trouvé (fallback) : {article['lot']}")
                     # --------------------------------------------------------
 
                     print(f"[OK] Article identifié : {article['designation']}")

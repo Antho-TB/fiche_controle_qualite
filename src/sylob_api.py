@@ -84,6 +84,54 @@ class SylobAPI:
             logging.error(f"Erreur de parsing XML Sylob : {e}")
             return None
 
+    def chercher_lot_par_po(self, po: str):
+        """Interroge l'API Sylob pour trouver le lot correspondant à un numéro de commande (PO)"""
+        if not self.base_url:
+            return None
+            
+        # L'URL de base est configurée pour API_ART_EAN, on la remplace pour utiliser API_LOT_PO
+        url = self.base_url.replace("API_ART_EAN", "API_LOT_PO")
+        params = {"limite": "1", "PO": po}
+        
+        try:
+            logging.info(f"Interrogation API Sylob LOT pour PO : {po}")
+            response = requests.get(
+                url,
+                params=params,
+                headers=self.headers,
+                verify=False,
+                timeout=5
+            )
+            response.raise_for_status()
+            
+            # Parser XML pour le Lot
+            root = ET.fromstring(response.text)
+            ligne = root.find(".//ligneResultatWS")
+            
+            if ligne is None:
+                logging.info(f"Aucun lot trouvé dans Sylob pour le PO : {po}")
+                return None
+                
+            valeurs = ligne.findall("valeur")
+            
+            # Le lot est supposé être retourné par la requête
+            # Vu qu'on a sélectionné "Numéro de la commande" puis "Numéro de lot"
+            if len(valeurs) >= 2:
+                # Si la valeur 0 est le PO, la valeur 1 est le lot
+                lot = (valeurs[1].text or "").strip()
+                return lot
+            elif len(valeurs) == 1:
+                return (valeurs[0].text or "").strip()
+            
+            return None
+            
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Erreur lors de l'appel API Sylob (Lot PO) : {e}")
+            return None
+        except ET.ParseError as e:
+            logging.error(f"Erreur de parsing XML Sylob (Lot) : {e}")
+            return None
+
 if __name__ == "__main__":
     # Test local
     logging.basicConfig(level=logging.INFO)
