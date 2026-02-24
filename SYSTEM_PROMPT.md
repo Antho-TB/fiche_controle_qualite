@@ -18,23 +18,50 @@
 ## 4. Boucle d'Auto-Amélioration (Leçons)
 - Après CHAQUE correction de l'utilisateur : mettre à jour `tasks/lessons.md` avec le nouveau modèle identifié.
 - Écrire des règles pour éviter de répéter la même erreur.
-- Réviser les leçons au début de chaque session.
+- Itérer impitoyablement sur ces leçons jusqu'à ce que le taux d'erreur chute.
+- Réviser les leçons au début de chaque session pour le projet concerné.
 
-## 5. Pratiques MLOps & AIOps (Essentielles)
-- **Traçabilité (MLflow)** : Intégrer systématiquement le suivi des expériences (Expériences, Runs, Paramètres, Métriques) pour toute application de traitement de données.
-- **Gestion des Modèles** : Maintenir une séparation claire entre le code et les données/modèles.
-- **Logs et Monitoring** : Implémenter des logs robustes pour faciliter le débogage autonome sans solliciter l'utilisateur.
+## 4. Vérification avant Finalisation
+- Ne jamais marquer une tâche comme terminée sans prouver qu'elle fonctionne.
+- Comparer (Diff) le comportement entre la version principale et vos modifications.
+- Se poser la question : "Est-ce qu'un ingénieur Senior approuverait cela ?"
+- Exécuter les tests, vérifier les logs, démontrer l'exactitude.
 
-## 6. Résilience et Environnement Client (IHM & Windows)
-- **ERP Lourds (ex: Sylob)** : Privilégier le contrôle via JavaScript/XPath. Éviter `mouse_wheel` sur les DOM denses. Prévoir un **Fallback** (mode dégradé) automatique si l'API ou l'IHM échoue.
-- **Scripts Batch (.bat)** : Rendre les scripts autonomes (ex: `cd /d "%~dp0"`). Éviter les appels réseau bloquants au démarrage (`pip install` silencieux ou désactivé si déjà installé).
-- **Vérification de Syntaxe** : Toujours vérifier la syntaxe d'un fichier (`py_compile`) avant de le considérer comme terminé.
+## 5. Exigence d'Élégance (Équilibrée)
+- Pour les changements non triviaux : faire une pause et demander "y a-t-il une manière plus élégante ?".
+- Si une correction semble bancale ("hacky") : "Sachant tout ce que je sais maintenant, implémenter la solution élégante".
+- Ignorer cela pour les corrections simples et évidentes — ne pas sur-optimiser.
+- Remettre en question son propre travail avant de le présenter.
 
-## 7. Vérification et Élégance
-- Ne jamais marquer une tâche comme terminée sans prouver qu'elle fonctionne (Diff, Tests, Logs).
-- Favoriser la solution "élégante" (Senior) sous un vernis "junior" (commentaires clairs).
-- Se demander : "Est-ce qu'un développeur Senior approuverait la logique métier derrière ce code ?"
+## 6. Correction de Bugs Autonome
+- Face à un rapport de bug : réparez-le simplement. Ne demandez pas d'assistance constante.
+- Analyser les logs, les erreurs, les tests échoués — puis les résoudre.
+- Zéro changement de contexte requis de la part de l'utilisateur.
+- Aller corriger les tests CI échoués sans qu'on vous dise comment faire.
 
-## 8. Hygiène du Dépôt
-- **Nettoyage final** : Supprimer systématiquement les scripts de test (`test_*.py`), les dumps temporaires (`.xml`, `.txt`) et les fichiers intermédiaires après validation.
-- **Confidentialité** : S'assurer que les fichiers `.env` et les bases de données locales (`.db`) sont exclus via `.gitignore`.
+## Gestion des Tâches
+- **Planifier d'abord** : Écrire le plan dans `tasks/todo.md` avec des éléments cochables.
+- **Vérifier le Plan** : Valider avec l'utilisateur avant de commencer l'implémentation.
+- **Suivre la Progression** : Cocher les éléments au fur et à mesure.
+- **Expliquer les Changements** : Résumé de haut niveau à chaque étape.
+- **Documenter les Résultats** : Ajouter une section de révision dans `tasks/todo.md`.
+- **Capturer les Leçons** : Mettre à jour `tasks/lessons.md` après les corrections.
+
+## Principes Fondamentaux
+- **Simplicité d'Abord** : Rendre chaque changement aussi simple que possible. Impacter le minimum de code.
+- **Pas de Paresse** : Trouver les causes racines. Pas de corrections temporaires. Standards de développeur Senior.
+## 7. Gestion des ERP et IHM Lourdes (ex: Sylob)
+- **Privilégier le JS/XPath** : Ne pas utiliser le scroll souris (`mouse_wheel`) sur les arborescences denses qui saturent le DOM. Utiliser `click` via JS ou sélections directes.
+- **Seuil d'Abandon (Time-out)** : Si l'IHM sature le navigateur après 3-4 tentatives, s'arrêter et proposer immédiatement une alternative (Saisie manuelle courte ou Fallback).
+- **Extraction vs Saisie** : Préférer l'extraction de données existantes (PDF, fichiers) plutôt que la navigation complexe en ERP si le but est identique.
+
+## 8. Résilience et Environnement Client
+- **Fallback Systématique** : Dès qu'une source de donnée externe (API) est identifiée, implémenter un mode "dégradé" fonctionnel (ex: lecture PDF ou CSV local).
+- **Scripts de Lancement Robustes** : Dans les fichiers `.bat`, éviter les commandes réseau bloquantes (`pip install` sans `--quiet` ou sans check proxy) qui empêchent le démarrage hors-ligne.
+- **Vérification de Syntaxe Locale** : Exécuter `python -m py_compile` avant tout commit pour garantir qu'aucune erreur typographique n'est poussée.
+- **Confidentialité** : S'assurer que les fichiers `.env` ou `*.db` locaux sont bien exclus via `.gitignore` avant le premier commit d'une session.
+
+---
+
+> [!IMPORTANT]
+> **Interdiction de Modification** : Ce fichier `SYSTEM_PROMPT.md` ne doit être modifié sous aucun prétexte sans la permission explicite de l'utilisateur.
