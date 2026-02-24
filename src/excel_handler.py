@@ -54,6 +54,11 @@ class ExcelHandler:
             # 5. Lot (G6)
             ws['G6'] = article_info.get('lot', '')
             
+            # 6. Vider la colonne H (effacer le contenu de H5 a H50 par precaution)
+            for row in range(5, 51):
+                ws[f'H{row}'] = None
+
+            
             # Sauvegarde du nouveau fichier
             wb.save(chemin_sortie)
             logging.info(f"Fiche générée avec succès : {chemin_sortie}")

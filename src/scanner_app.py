@@ -107,6 +107,14 @@ def lancer_session_scan():
                         print(f"[SUCCÈS] Document créé : {chemin_fiche}")
                         # On log un événement pour chaque scan réussi
                         mlflow.log_metric("total_scans_success", nb_scans)
+                        
+                        # --- Demander l'archivage après chaque génération ---
+                        print()
+                        choix_arch = input("     -> Appuyez sur Entrée pour CONTINUER, ou tapez 'A' pour ARCHIVER le(s) PDF actuel(s) : ").strip().upper()
+                        if choix_arch == 'A':
+                            pdf_data.archiver_pdfs()
+                            print("     [INFO] Fichiers PDF archivés avec succès.")
+                        print()
                     else:
                         print("[ERREUR] Impossible de sauvegarder le fichier Excel.")
                 else:
