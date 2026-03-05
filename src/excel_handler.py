@@ -26,10 +26,11 @@ class ExcelHandler:
             return None
 
         # On crée un nom de fichier unique pour cette inspection
-        # Format : Fiche_[Ref]_[Date]_[Heure].xlsx
+        # Format : Fiche_[Ref]_[Date]_[Heure].xlsx, avec ajout du Lot si présent
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
-        nom_sortie = f"Fiche_{article_info['ref']}_{timestamp}.xlsx"
+        lot_suffix = f"_{article_info['lot']}" if article_info.get('lot') else ""
+        nom_sortie = f"Fiche_{article_info['ref']}{lot_suffix}_{timestamp}.xlsx"
         chemin_sortie = os.path.join(self.output_dir, nom_sortie)
 
         try:

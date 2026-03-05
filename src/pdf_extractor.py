@@ -66,10 +66,11 @@ class PDFExtractor:
                     if art_code:
                         lot = po_to_lot.get(po, "")
                         # On stocke l'information pour l'associer au scan plus tard
-                        self.articles_pdf[art_code] = {
-                            "po": po,
-                            "lot": lot
-                        }
+                        if art_code not in self.articles_pdf:
+                            self.articles_pdf[art_code] = []
+                        info = {"po": po, "lot": lot}
+                        if info not in self.articles_pdf[art_code]:
+                            self.articles_pdf[art_code].append(info)
             logging.info(f"Extraction PDF terminée pour {os.path.basename(pdf_path)}")
             
         except Exception as e:
@@ -92,7 +93,7 @@ class PDFExtractor:
             if len(k) >= 6 and (k in code_article or k in ref_article):
                return v
                
-        return {"po": "", "lot": ""}
+        return []
 
     def archiver_pdfs(self):
         """

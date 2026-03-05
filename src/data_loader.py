@@ -29,7 +29,7 @@ class DataLoader:
     def _load_data(self):
         """Charge le fichier CSV avec Pandas"""
         if not os.path.exists(self.csv_path):
-            logging.error(f"Fichier introuvable : {self.csv_path}")
+            logging.warning(f"Fichier CSV de fallback introuvable : {self.csv_path}. Utilisation exclusive de l'API Sylob.")
             return
 
         try:
@@ -46,12 +46,12 @@ class DataLoader:
             )
             
             # Renommage des colonnes pour plus de clarté
-            # On s'attend à : 0=Référence, 1=EAN, 2=Désignation
-            self.df.columns = ['ref', 'ean', 'designation']
+            # On s'attend à : 0=Référence, 1=EAN, 2=Désignation, 3=Lot, 4=PO
+            self.df.columns = ['ref', 'ean', 'designation', 'lot', 'po']
             
             # Nettoyage des espaces superflus (trim)
             for col in self.df.columns:
-                self.df[col] = self.df[col].str.strip()
+                self.df[col] = self.df[col].astype(str).str.strip()
                 
             logging.info(f"Base article chargée avec succès : {len(self.df)} articles.")
             
@@ -94,6 +94,10 @@ class DataLoader:
         if not resultat.empty:
             article = resultat.iloc[0].to_dict()
             article['source'] = 'CSV Local'
+            # Garantir que les clés po et lot existent même si NaN dans le CSV
+            article['po'] = article.get('po', '') if pd.notna(article.get('po')) else ''
+            article['lot'] = article.get('lot', '') if pd.notna(article.get('lot')) else ''
+            
             logging.info(f"Article trouvé dans le CSV : {article['designation']}")
             return article
             

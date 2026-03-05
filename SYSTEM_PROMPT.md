@@ -39,8 +39,19 @@
 - Zéro changement de contexte requis de la part de l'utilisateur.
 - Aller corriger les tests CI échoués sans qu'on vous dise comment faire.
 
-## 8. Gestion des ERP et IHM Lourdes (ex: Sylob)
-- **Privilégier le JS/XPath** : Ne pas utiliser le scroll souris (mouse_wheel) sur les arborescences denses qui saturent le DOM. Utiliser click via JS ou sélections directes.
+## Gestion des Tâches
+- **Planifier d'abord** : Écrire le plan dans `tasks/todo.md` avec des éléments cochables.
+- **Vérifier le Plan** : Valider avec l'utilisateur avant de commencer l'implémentation.
+- **Suivre la Progression** : Cocher les éléments au fur et à mesure.
+- **Expliquer les Changements** : Résumé de haut niveau à chaque étape.
+- **Documenter les Résultats** : Ajouter une section de révision dans `tasks/todo.md`.
+- **Capturer les Leçons** : Mettre à jour `tasks/lessons.md` après les corrections.
+
+## Principes Fondamentaux
+- **Simplicité d'Abord** : Rendre chaque changement aussi simple que possible. Impacter le minimum de code.
+- **Pas de Paresse** : Trouver les causes racines. Pas de corrections temporaires. Standards de développeur Senior.
+## 7. Gestion des ERP et IHM Lourdes (ex: Sylob)
+- **Privilégier le JS/XPath** : Ne pas utiliser le scroll souris (`mouse_wheel`) sur les arborescences denses qui saturent le DOM. Utiliser `click` via JS ou sélections directes.
 - **Seuil d'Abandon (Time-out)** : Si l'IHM sature le navigateur après 3-4 tentatives, s'arrêter et proposer immédiatement une alternative (Saisie manuelle courte ou Fallback).
 - **Extraction vs Saisie** : Préférer l'extraction de données existantes (PDF, fichiers) plutôt que la navigation complexe en ERP si le but est identique.
 

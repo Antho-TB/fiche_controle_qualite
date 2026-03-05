@@ -25,6 +25,7 @@ class SylobAPI:
         self.unite_pers = os.getenv("SYLOB_UNITE_PERS")
         self.session_id = os.getenv("SYLOB_SESSION_ID")
         self.base_url = os.getenv("SYLOB_BASE_URL")
+        self.base_url1 = os.getenv("SYLOB_BASE_URL1", "") # Ajout de la 2ème URL
         
         # Préparation du header d'authentification Basic
         self.headers = self._build_headers()
@@ -84,17 +85,22 @@ class SylobAPI:
             logging.error(f"Erreur de parsing XML Sylob : {e}")
             return None
 
-    def chercher_lot_par_po(self, po: str):
-        """Interroge l'API Sylob pour trouver le lot correspondant à un numéro de commande (PO)"""
-        if not self.base_url:
-            return None
-            
-        # L'URL de base est configurée pour API_ART_EAN, on la remplace pour utiliser API_LOT_PO
-        url = self.base_url.replace("API_ART_EAN", "API_LOT_PO")
-        params = {"limite": "1", "PO": po}
+    def chercher_lot_par_po(self, po: str, art: str = "", lot: str = "", ean: str = ""):
+        """Interroge l'API Sylob pour trouver le lot correspondant à un numéro de commande (PO) et article"""
+        
+        url = self.base_url1
+        if not url:
+            # Fallback historique si la 2ème URL n'est pas dans le .env
+            if self.base_url:
+                url = self.base_url.replace("API_ART_EAN", "RECEPTIONAPI")
+            else:
+                return None
+        
+        # La nouvelle requête attend CMD, ART, LOT et EAN
+        params = {"limite": "1", "CMD": po, "ART": art, "LOT": lot, "EAN": ean}
         
         try:
-            logging.info(f"Interrogation API Sylob LOT pour PO : {po}")
+            logging.info(f"Interrogation API Sylob RECEPTIONAPI pour PO:{po}, ART:{art}, LOT:{lot}")
             response = requests.get(
                 url,
                 params=params,
@@ -126,10 +132,10 @@ class SylobAPI:
             return None
             
         except requests.exceptions.RequestException as e:
-            logging.error(f"Erreur lors de l'appel API Sylob (Lot PO) : {e}")
+            logging.warning(f"Avertissement lors de l'appel API Sylob (Lot PO), passage au PDF : {e}")
             return None
         except ET.ParseError as e:
-            logging.error(f"Erreur de parsing XML Sylob (Lot) : {e}")
+            logging.warning(f"Avertissement de parsing XML Sylob (Lot), passage au PDF : {e}")
             return None
 
 if __name__ == "__main__":

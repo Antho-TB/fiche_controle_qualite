@@ -68,63 +68,79 @@ def lancer_session_scan():
                 if article:
                     nb_scans += 1
 
-                    # --- NOUVEAU: Extraction d'infos via PDF (Lot + PO) ---
-                    infos_pdf = pdf_data.chercher_infos_pdf(
+                    # --- NOUVEAU: Mutiples Lots & Validation Sylob ---
+                    infos_list = pdf_data.chercher_infos_pdf(
                         code_article=code_scanne,
                         ref_article=article.get('ref', '')
                     )
-                    po = infos_pdf.get('po', '')
-                    article['po'] = po
                     
-                    # Récupérer le lot depuis Sylob si on a un PO
-                    lot_sylob = None
-                    if po and hasattr(loader, 'sylob') and loader.sylob:
-                        try:
-                            lot_sylob = loader.sylob.chercher_lot_par_po(po)
-                        except Exception as e:
-                            logging.error(f"Erreur lors de la récupération du lot Sylob: {e}")
-                    
-                    if lot_sylob:
-                        article['lot'] = lot_sylob
-                        print(f"     [Sylob] Lot récupéré : {lot_sylob}")
-                    else:
-                        article['lot'] = infos_pdf.get('lot', '')
-                        if article['lot']:
-                            print(f"     [PDF] Lot trouvé (fallback) : {article['lot']}")
-                    
-                    # Alerte si infos manquantes
-                    if not article['po'] and not article['lot']:
-                        print("     [!] Attention : Ni commande ni lot trouvés pour cet article.")
-                    elif not article['po']:
-                        print("     [!] Attention : Numéro de commande non trouvé.")
-                    elif not article['lot']:
-                        print("     [!] Attention : Numéro de lot non trouvé.")
-                    # --------------------------------------------------------
-
+                    if not infos_list:
+                        # Fallback au CSV si le PDF ne renvoie rien
+                        po_csv = article.get('po', '')
+                        lot_csv = article.get('lot', '')
+                        if po_csv or lot_csv:
+                            infos_list = [{'po': po_csv, 'lot': lot_csv}]
+                        else:
+                            infos_list = [{'po': '', 'lot': ''}]
+                            
                     print(f"[OK] Article identifié : {article['designation']}")
                     print(f"     Référence : {article['ref']}")
-                    
-                    if article['po']:
-                        print(f"     [PDF] N° Commande : {article['po']} | Lot : {article['lot']}")
 
-                    # 3. Génération de la fiche Excel
-                    print("     Génération de la fiche Excel en cours...")
-                    chemin_fiche = handler.generer_fiche(article)
-                    
-                    if chemin_fiche:
-                        print(f"[SUCCÈS] Document créé : {chemin_fiche}")
-                        # On log un événement pour chaque scan réussi
-                        mlflow.log_metric("total_scans_success", nb_scans)
+                    import time
+                    for idx, infos in enumerate(infos_list):
+                        po = infos.get('po', '')
+                        lot = infos.get('lot', '')
                         
-                        # --- Demander l'archivage après chaque génération ---
-                        print()
-                        choix_arch = input("     -> Appuyez sur Entrée pour CONTINUER, ou tapez 'A' pour ARCHIVER le(s) PDF actuel(s) : ").strip().upper()
-                        if choix_arch == 'A':
-                            pdf_data.archiver_pdfs()
-                            print("     [INFO] Fichiers PDF archivés avec succès.")
-                        print()
-                    else:
-                        print("[ERREUR] Impossible de sauvegarder le fichier Excel.")
+                        article_clone = article.copy()
+                        article_clone['po'] = po
+                        article_clone['lot'] = lot
+                        
+                        # Validation Sylob
+                        validation_sylob = False
+                        if po and hasattr(loader, 'sylob') and loader.sylob:
+                            try:
+                                result = loader.sylob.chercher_lot_par_po(
+                                    po=po, 
+                                    art=article.get('ref', ''), 
+                                    lot=lot,
+                                    ean=code_scanne
+                                )
+                                if result is not None:
+                                    validation_sylob = True
+                            except Exception as e:
+                                logging.error(f"Erreur lors de la validation Sylob: {e}")
+                        
+                        suffix_num = f" (Lot {idx+1}/{len(infos_list)})" if len(infos_list) > 1 else ""
+                        if validation_sylob:
+                            print(f"     [Sylob] Validation OK : Commande {po} | Lot {lot}{suffix_num}")
+                        else:
+                            if po or lot:
+                                print(f"     [PDF] Fallback utilisé : Commande {po} | Lot {lot} (Non validé Sylob){suffix_num}")
+                            else:
+                                print(f"     [!] Attention : Ni commande ni lot trouvés{suffix_num}.")
+
+                        # 3. Génération de la fiche Excel
+                        print(f"     Génération de la fiche Excel en cours...")
+                        if idx > 0:
+                            time.sleep(1) # Pour s'assurer de l'unicité du timestamp dans le nom de fichier
+                            
+                        chemin_fiche = handler.generer_fiche(article_clone)
+                        
+                        if chemin_fiche:
+                            print(f"[SUCCÈS] Document créé : {chemin_fiche}")
+                        else:
+                            print("[ERREUR] Impossible de sauvegarder le fichier Excel.")
+                            
+                    # On log un événement pour le scan globalement réussi
+                    mlflow.log_metric("total_scans_success", nb_scans)
+                    
+                    # --- Demander l'archivage après chaque génération ---
+                    print()
+                    choix_arch = input("     -> Appuyez sur Entrée pour CONTINUER, ou tapez 'A' pour ARCHIVER le(s) PDF actuel(s) : ").strip().upper()
+                    if choix_arch == 'A':
+                        pdf_data.archiver_pdfs()
+                        print("     [INFO] Fichiers PDF archivés avec succès.")
+                    print()
                 else:
                     print(f"[!] Erreur : Le code '{code_scanne}' est inconnu.")
                     print("    Vérifiez qu'il s'agit bien d'une référence ou d'un GenCod valide.")
