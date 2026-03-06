@@ -12,9 +12,19 @@ if (-not (Test-Path $dest)) {
     Write-Host "Création du dossier cible: $dest" -ForegroundColor Green
 }
 
-# 2. Liste des éléments essentiels à copier (on ignore .git, .venv, tasks etc.)
-$foldersToCopy = @("src", "data", "outputs")
-$filesToCopy = @("LANCER_SCANNER.bat", ".env", "requirements.txt")
+# 2. Liste des éléments essentiels à copier
+$foldersToCopy = @("0_Modele_Et_Donnees", "1_Packing_Lists_A_Traiter", "2_Fiches_Creees")
+$filesToCopy = @(".env", "dist\Scanner_Qualite.exe")
+
+# --- Nettoyage des anciennes versions Python ---
+$oldItems = @("src", "requirements.txt", "LANCER_SCANNER.bat", "data", "outputs")
+foreach ($old in $oldItems) {
+    $oldPath = "$dest\$old"
+    if (Test-Path $oldPath) {
+        Remove-Item $oldPath -Recurse -Force
+        Write-Host "  -> Ancien élément $old supprimé." -ForegroundColor Gray
+    }
+}
 
 Write-Host "`nCopie des fichiers vers le serveur..." -ForegroundColor Yellow
 
@@ -35,8 +45,8 @@ foreach ($file in $filesToCopy) {
 # 3. Masquer les fichiers techniques pour l'utilisateur
 Write-Host "`nCréation de l'interface métier (masquage du code)..." -ForegroundColor Yellow
 
-# On cache src, .env et requirements.txt
-$hiddenItems = @("src", ".env", "requirements.txt")
+# On cache le fichier .env
+$hiddenItems = @(".env")
 foreach ($item in $hiddenItems) {
     $targetPath = "$dest\$item"
     if (Test-Path $targetPath) {
@@ -50,7 +60,7 @@ foreach ($item in $hiddenItems) {
 
 Write-Host "`n=============================================="
 Write-Host "DEPLOIEMENT TERMINE AVEC SUCCES !" -ForegroundColor Green
-Write-Host "Votre collègue n'a plus qu'à double-cliquer sur 'LANCER_SCANNER.bat' dans:"
+Write-Host "Votre collègue n'a plus qu'à double-cliquer sur 'Scanner_Qualite.exe' dans:"
 Write-Host "$dest"
 Write-Host "Appuyez sur une touche pour quitter..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

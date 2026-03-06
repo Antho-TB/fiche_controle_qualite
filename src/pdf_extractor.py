@@ -1,15 +1,25 @@
 import os
 import re
-import logging
+import sys
 from pypdf import PdfReader
+
+def get_base_path():
+    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 
 class PDFExtractor:
     """
     Extrait les données (N° de Commande, N° de Lot) des fichiers PDF (Packing Lists).
     """
     
-    def __init__(self, pdf_dir="data/packing_lists"):
-        self.pdf_dir = pdf_dir
+    def __init__(self, pdf_dir=None):
+        if pdf_dir is None:
+            self.pdf_dir = os.path.join(get_base_path(), "1_Packing_Lists_A_Traiter")
+        else:
+            self.pdf_dir = pdf_dir
         self.articles_pdf = {} # Dictionnaire avec la référence article (ou coeur) comme clé
         self._load_all_pdfs()
 

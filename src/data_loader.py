@@ -1,6 +1,14 @@
 import pandas as pd
 import logging
 import os
+import sys
+
+def get_base_path():
+    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 
 # Configuration du logging (Bonne pratique MLOps : tracer les actions)
 logging.basicConfig(
@@ -20,7 +28,9 @@ class DataLoader:
     Gère désormais une source hybride : API Sylob (temps réel) + CSV (secours).
     """
     
-    def __init__(self, csv_path="data/article.csv"):
+    def __init__(self, csv_path=None):
+        if csv_path is None:
+            csv_path = os.path.join(get_base_path(), "0_Modele_Et_Donnees", "article.csv")
         self.csv_path = csv_path
         self.df = None
         self.sylob = SylobAPI() # Nouvelle source API

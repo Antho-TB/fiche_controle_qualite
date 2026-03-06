@@ -1,7 +1,15 @@
 import openpyxl
 from datetime import datetime
 import os
+import sys
 import logging
+
+def get_base_path():
+    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 
 class ExcelHandler:
     """
@@ -9,9 +17,14 @@ class ExcelHandler:
     On utilise openpyxl pour préserver le formatage et les formules du template.
     """
     
-    def __init__(self, template_path="data/FOR-ACH-30-2 Fiche d'inspection produit-Contrôle réception.xlsx"):
-        self.template_path = template_path
-        self.output_dir = "outputs"
+    def __init__(self, template_path=None):
+        base_path = get_base_path()
+        if template_path is None:
+            self.template_path = os.path.join(base_path, "0_Modele_Et_Donnees", "FOR-ACH-30-2 Fiche d'inspection produit-Contrôle réception.xlsx")
+        else:
+            self.template_path = template_path
+            
+        self.output_dir = os.path.join(base_path, "2_Fiches_Creees")
         
         # S'assurer que le dossier de sortie existe
         if not os.path.exists(self.output_dir):

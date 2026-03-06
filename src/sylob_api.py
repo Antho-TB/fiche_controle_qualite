@@ -1,4 +1,5 @@
 import os
+import sys
 import base64
 import requests
 import urllib3
@@ -6,8 +7,18 @@ import xml.etree.ElementTree as ET
 import logging
 from dotenv import load_dotenv
 
-# Chargement des variables d'environnement depuis le fichier .env
-load_dotenv()
+def get_base_path():
+    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+# Chargement explicite du .env situé à la racine de l'exécutable
+env_path = os.path.join(get_base_path(), '.env')
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv() # Fallback standard
 
 # Désactivation des avertissements pour les certificats SSL auto-signés
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
