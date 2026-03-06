@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import logging
 from pypdf import PdfReader
 
 def get_base_path():
