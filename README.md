@@ -58,5 +58,24 @@ Bien que l'application s'exécute localement à 100%, l'architecture reste prêt
 - **Convention de Nommage** : Respect du format `<Prefix>-qualite-scanner-<Env>` (exemple `func-qualite-scanner-prod`).
 - **Tags d'entreprise** : Intégration systématique de `project` et `deployment`.
 
+---
+
+## 🐛 Historique de Résolution et Traçabilité
+
+Afin d'assurer la traçabilité des modifications, voici l'historique des différents correctifs techniques appliqués à l'outil lors de la V2 :
+
+1. **Correction des Dépendances (RequestsDependencyWarning)**
+   - L'erreur venait de versions incompatibles de `urllib3` et `chardet` par défaut.
+   - Les versions ont été strictement verrouillées (Pinnage) dans le fichier `requirements.txt` pour garantir la stabilité de l'exécutable sur tous les postes.
+
+2. **Gestion robuste de la Base de Secours (article.csv)**
+   - Initialement, l'absence du fichier CSV local de secours faisait complètement planter l'application à l'ouverture.
+   - `src/data_loader.py` a été assoupli pour simplement déclencher un `WARNING` non bloquant. Le logiciel tente alors l'interrogation de l'API en direct sans s'arrêter.
+   - Ajout au fichier CSV des colonnes `lot` et `po` afin d'avoir une capacité de secours déconnectée fiable sur les champs vitaux de l'entreprise.
+
+3. **Environnement Packagé Standardisé (PyInstaller)**
+   - Le système initial demandait des installations lourdes de Python sur chaque PC métier.
+   - L'algorithme a été migré avec succès en un `.exe` unique et autonome. La gestion des Path Python et des ressources temporelles générées par le `.exe` (dans les dossiers temporaires Data Windows) ont été corrigés pour retrouver dynamiquement les dossiers métiers `1_Packing_Lists_...` et `2_Fiches_Creees`.
+
 > [!IMPORTANT]
 > Avant un grand déploiement inter-équipes, il est recommandé de tester l'application en simulant une coupure réseau pour confirmer la fluidité du comportement de secours (fallback).
