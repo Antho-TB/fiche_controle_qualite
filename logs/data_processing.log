@@ -1,0 +1,168 @@
+2026-02-19 08:54:14,298 - INFO - Base article chargée avec succès : 3079 articles.
+2026-02-19 08:54:14,300 - INFO - Article trouvé : SANTOKU  19 CM FORGE EN BERLINGOT TOP CHEF AMAZON
+2026-02-19 15:09:43,599 - INFO - Base article chargée avec succès : 3079 articles.
+2026-02-19 15:09:58,705 - WARNING - Aucun article trouvé pour le code : 3118220054967
+2026-02-19 15:24:42,925 - INFO - Base article chargée avec succès : 3079 articles.
+2026-02-19 15:24:43,739 - WARNING - Aucun article trouvé pour le code : 3118220054967
+2026-02-19 15:25:06,077 - INFO - Base article chargée avec succès : 3079 articles.
+2026-02-19 15:25:06,943 - INFO - Article trouvé via recherche du coeur de code (1182200549)
+2026-02-19 15:25:06,943 - INFO - Article trouvé : CAISSE AME. 470 X 300 X 310 IMPRIMEE 71590032 LOT 2205021125
+2026-02-19 15:25:07,212 - INFO - Fiche générée avec succès : outputs\Fiche_CONS0850047_20260219_152506.xlsx
+2026-02-20 09:48:47,307 - ERROR - Fichier introuvable : data/article.csv
+2026-02-20 09:49:06,362 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-20 09:49:06,498 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-20 09:49:06,637 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260220_094906.xlsx
+2026-02-20 09:51:57,880 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-20 09:51:58,032 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-20 09:51:58,119 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260220_095158.xlsx
+2026-02-20 09:54:13,454 - ERROR - Fichier introuvable : data/article.csv
+2026-02-20 09:54:21,303 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-20 09:54:21,458 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-20 09:54:21,566 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260220_095421.xlsx
+2026-02-23 08:42:34,785 - ERROR - Fichier introuvable : data/article.csv
+2026-02-23 08:42:39,409 - ERROR - Fichier introuvable : data/article.csv
+2026-02-23 08:42:42,831 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-23 08:42:44,984 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-23 08:42:45,079 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260223_084244.xlsx
+2026-02-23 11:02:49,569 - ERROR - Fichier introuvable : data/article.csv
+2026-02-23 11:02:49,570 - INFO - Lecture automatique de 2 fichier(s) PDF...
+2026-02-23 11:02:49,618 - INFO - Extraction PDF terminée pour PL-SZSE2513336-SGRU2236795.pdf
+2026-02-23 11:02:49,651 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-23 11:02:53,073 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-23 11:02:53,567 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-23 11:02:53,714 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260223_110253.xlsx
+2026-02-23 11:02:53,765 - INFO - Interrogation API Sylob pour EAN : 31040028
+2026-02-23 17:04:41,652 - ERROR - Fichier introuvable : data/article.csv
+2026-02-23 17:04:41,653 - INFO - Lecture automatique de 2 fichier(s) PDF...
+2026-02-23 17:04:41,857 - INFO - Extraction PDF terminée pour PL-SZSE2513336-SGRU2236795.pdf
+2026-02-23 17:04:42,030 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 09:00:10,437 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 09:00:10,438 - INFO - Lecture automatique de 2 fichier(s) PDF...
+2026-02-24 09:00:10,837 - INFO - Extraction PDF terminée pour PL-SZSE2513336-SGRU2236795.pdf
+2026-02-24 09:00:11,225 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 09:00:19,006 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 09:00:21,725 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 09:00:22,255 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_090021.xlsx
+2026-02-24 09:03:26,953 - INFO - Archivage de 2 PDF(s)...
+2026-02-24 09:03:26,969 - ERROR - Impossible d'archiver PL-SZSE2600273-SGRU2253998.pdf: [WinError 32] Le processus ne peut pas accéder au fichier car ce fichier est utilisé par un autre processus: 'data/packing_lists\\PL-SZSE2600273-SGRU2253998.pdf'
+2026-02-24 09:03:49,158 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 09:03:49,159 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-24 09:03:49,196 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 09:03:52,172 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 09:03:52,693 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 09:03:52,846 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_090352.xlsx
+2026-02-24 14:49:21,147 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 14:49:21,148 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-24 14:49:21,303 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 14:49:40,851 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 14:49:41,036 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 14:49:41,493 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_144941.xlsx
+2026-02-24 15:03:48,666 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 15:03:48,668 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-24 15:03:48,706 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 15:04:25,225 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 15:04:25,792 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 15:04:26,045 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_150425.xlsx
+2026-02-24 15:05:54,499 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 15:05:54,500 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-24 15:05:54,545 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 15:06:21,842 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 15:06:22,430 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 15:06:22,552 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_150622.xlsx
+2026-02-24 16:14:55,092 - ERROR - Fichier introuvable : data/article.csv
+2026-02-24 16:14:55,093 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-24 16:14:55,134 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-24 16:15:00,873 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-24 16:15:01,064 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-24 16:15:01,169 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260224_161501.xlsx
+2026-02-24 16:15:21,436 - INFO - Archivage de 1 PDF(s)...
+2026-02-26 11:56:54,790 - ERROR - Fichier introuvable : data/article.csv
+2026-02-26 11:56:54,791 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-26 11:56:54,934 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-26 16:33:21,774 - ERROR - Fichier introuvable : data/article.csv
+2026-02-26 16:33:21,776 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-26 16:33:21,942 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-27 09:15:11,772 - ERROR - Fichier introuvable : data/article.csv
+2026-02-27 09:15:11,774 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-27 09:15:11,924 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-27 09:22:14,140 - INFO - Base article chargée avec succès : 2 articles.
+2026-02-27 09:22:14,140 - INFO - Interrogation API Sylob pour EAN : 10120098
+2026-02-27 09:22:14,752 - INFO - Article trouvé dans le CSV : Article de Test (Historique)
+2026-02-27 09:23:11,039 - INFO - Base article chargée avec succès : 2 articles.
+2026-02-27 09:23:11,040 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-02-27 09:23:11,080 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-02-27 09:24:07,075 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-02-27 09:24:07,209 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-02-27 09:24:07,445 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260227_092407.xlsx
+2026-02-27 09:26:16,104 - INFO - Base article chargée avec succès : 2 articles.
+2026-02-27 09:26:16,104 - INFO - Interrogation API Sylob pour EAN : 10120098
+2026-02-27 09:26:16,242 - INFO - Article trouvé dans le CSV : Article de Test (Historique)
+2026-03-04 11:35:12,072 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 11:35:12,073 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 11:35:12,214 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 13:47:16,223 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 13:47:16,226 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 13:47:16,319 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 13:47:24,221 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 13:47:24,532 - INFO - Article récupéré en direct de Sylob : M48 ESQUISSE INOX TB COLLECTION EN MALLETTE
+2026-03-04 13:47:24,533 - INFO - Interrogation API Sylob LOT pour PO : 00166346
+2026-03-04 13:47:24,752 - ERROR - Erreur lors de l'appel API Sylob (Lot PO) : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/API_LOT_PO/resultat?limite=1&PO=00166346
+2026-03-04 13:47:25,169 - INFO - Fiche générée avec succès : outputs\Fiche_22080001_20260304_134724.xlsx
+2026-03-04 13:54:00,821 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 13:54:00,822 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 13:54:00,863 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 13:54:11,551 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 13:54:11,713 - INFO - Article récupéré en direct de Sylob : M48 ESQUISSE INOX TB COLLECTION EN MALLETTE
+2026-03-04 13:54:11,713 - INFO - Interrogation API Sylob LOT pour PO : 00166346
+2026-03-04 13:54:11,812 - WARNING - Avertissement lors de l'appel API Sylob (Lot PO), passage au PDF : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/API_LOT_PO/resultat?limite=1&PO=00166346
+2026-03-04 13:54:11,922 - INFO - Fiche générée avec succès : outputs\Fiche_22080001_20260304_135411.xlsx
+2026-03-04 16:54:34,843 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 16:54:34,844 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 16:54:34,994 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 16:54:39,208 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 16:54:39,351 - ERROR - Erreur lors de l'appel API Sylob : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/RECEPTIONAPI/resultat?limite=1&EAN13=3118220053991
+2026-03-04 16:54:39,353 - WARNING - Aucun article trouvé (Sylob ou CSV) pour le code : 3118220053991
+2026-03-04 16:54:43,662 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 16:54:43,773 - ERROR - Erreur lors de l'appel API Sylob : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/RECEPTIONAPI/resultat?limite=1&EAN13=3118220053991
+2026-03-04 16:54:43,775 - WARNING - Aucun article trouvé (Sylob ou CSV) pour le code : 3118220053991
+2026-03-04 16:54:54,852 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 16:54:54,958 - ERROR - Erreur lors de l'appel API Sylob : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/RECEPTIONAPI/resultat?limite=1&EAN13=3118220053991
+2026-03-04 16:54:54,963 - WARNING - Aucun article trouvé (Sylob ou CSV) pour le code : 3118220053991
+2026-03-04 16:58:14,386 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 16:58:14,386 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 16:58:14,424 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 16:58:23,443 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 16:58:23,542 - INFO - Article récupéré en direct de Sylob : M48 ESQUISSE INOX TB COLLECTION EN MALLETTE
+2026-03-04 16:58:23,542 - INFO - Interrogation API Sylob RECEPTIONAPI pour PO:00166346, ART:22080001, Lot:2510021113
+2026-03-04 16:58:23,630 - WARNING - Avertissement lors de l'appel API Sylob (Lot PO), passage au PDF : 500 Server Error: Internal Server Error for url: https://srv-erp:8443/rest/query/RECEPTIONAPI/resultat?limite=1&CMD=00166346&ART=22080001&Lot=2510021113
+2026-03-04 16:58:24,074 - INFO - Fiche générée avec succès : outputs\Fiche_22080001_2510021113_20260304_165823.xlsx
+2026-03-04 17:12:03,291 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-04 17:12:03,292 - INFO - Lecture automatique de 1 fichier(s) PDF...
+2026-03-04 17:12:03,339 - INFO - Extraction PDF terminée pour PL-SZSE2600273-SGRU2253998.pdf
+2026-03-04 17:12:07,155 - INFO - Interrogation API Sylob pour EAN : 3118220053991
+2026-03-04 17:12:07,287 - INFO - Article récupéré en direct de Sylob : M48 ESQUISSE INOX TB COLLECTION EN MALLETTE
+2026-03-04 17:12:07,289 - INFO - Interrogation API Sylob RECEPTIONAPI pour PO:00166346, ART:22080001, LOT:2510021113
+2026-03-04 17:12:07,675 - INFO - Fiche générée avec succès : outputs\Fiche_22080001_2510021113_20260304_171207.xlsx
+2026-03-04 17:12:49,129 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-03-04 17:12:49,232 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-03-04 17:12:49,315 - INFO - Fiche générée avec succès : outputs\Fiche_32100001_20260304_171249.xlsx
+2026-03-05 12:16:19,103 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-05 12:16:33,211 - INFO - Base article chargée avec succès : 2 articles.
+2026-03-06 08:55:34,453 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:31:40,333 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\dist\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:31:40,336 - INFO - Dossier créé : C:\Users\abezille\dev\fiche_de_controle\dist\1_Packing_Lists_A_Traiter
+2026-03-16 10:42:38,475 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:42:38,475 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
+2026-03-16 10:47:58,445 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\dist\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:47:58,445 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\dist\1_Packing_Lists_A_Traiter
+2026-03-16 10:51:11,942 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:51:11,943 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
+2026-03-16 10:51:26,734 - INFO - Interrogation API Sylob pour EAN : 3118220054967
+2026-03-16 10:51:27,733 - INFO - Article récupéré en direct de Sylob : M16 OPALE ROUGE EN  BOITE TB COLLECTION
+2026-03-16 10:51:27,877 - INFO - Fiche générée avec succès : C:\Users\abezille\dev\fiche_de_controle\2_Fiches_Creees\Fiche_32100001_20260316_105127.xlsx
+2026-03-16 10:53:27,333 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 10:53:27,334 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
+2026-03-16 11:07:42,874 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 11:07:42,875 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
+2026-03-16 11:32:08,620 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
+2026-03-16 11:32:08,620 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter

@@ -11,11 +11,28 @@ def get_base_path():
 
 
 # Configuration du logging (Bonne pratique MLOps : tracer les actions)
+try:
+    log_dir = os.path.join(get_base_path(), "logs")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    log_file_path = os.path.join(log_dir, "data_processing.log")
+    
+    # Test if we can write to this directory
+    with open(log_file_path, 'a') as f:
+        pass
+        
+except (PermissionError, OSError):
+    import tempfile
+    log_dir = os.path.join(tempfile.gettempdir(), "Scanner_Qualite_Logs")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    log_file_path = os.path.join(log_dir, "data_processing.log")
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("logs/data_processing.log"),
+        logging.FileHandler(log_file_path),
         logging.StreamHandler()
     ]
 )

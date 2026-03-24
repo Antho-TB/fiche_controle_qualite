@@ -1,39 +1,28 @@
-# Python
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-.venv
-venv/
-ENV/
 
-# Distribution / Packaging
-dist/
-build/
-*.egg-info/
-
-# Données locales (Bonne pratique : ne pas versionner les données volumineuses ou sensibles)
-1_Packing_Lists_A_Traiter/*
-!1_Packing_Lists_A_Traiter/.gitkeep
-2_Fiches_Creees/*
-!2_Fiches_Creees/.gitkeep
-0_Modele_Et_Donnees/*
-!0_Modele_Et_Donnees/modèle_fiche_controle.xlsx
-!0_Modele_Et_Donnees/article.csv
-*.spec
-*.zip
-
-# MLOps - MLflow
+# MLFlow
 mlruns/
-mlruns.db
+*.db
+mlflow.db
+mlflow.db.bak
 
-# Logs
-logs/*.log
+# Secrets
+local.settings.json
+secrets/
+settings_backup.json
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Configuration sensible
-.env

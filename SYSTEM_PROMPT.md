@@ -39,18 +39,7 @@
 - Zéro changement de contexte requis de la part de l'utilisateur.
 - Aller corriger les tests CI échoués sans qu'on vous dise comment faire.
 
-## Gestion des Tâches
-- **Planifier d'abord** : Écrire le plan dans `tasks/todo.md` avec des éléments cochables.
-- **Vérifier le Plan** : Valider avec l'utilisateur avant de commencer l'implémentation.
-- **Suivre la Progression** : Cocher les éléments au fur et à mesure.
-- **Expliquer les Changements** : Résumé de haut niveau à chaque étape.
-- **Documenter les Résultats** : Ajouter une section de révision dans `tasks/todo.md`.
-- **Capturer les Leçons** : Mettre à jour `tasks/lessons.md` après les corrections.
-
-## Principes Fondamentaux
-- **Simplicité d'Abord** : Rendre chaque changement aussi simple que possible. Impacter le minimum de code.
-- **Pas de Paresse** : Trouver les causes racines. Pas de corrections temporaires. Standards de développeur Senior.
-## 7. Gestion des ERP et IHM Lourdes (ex: Sylob)
+## 8. Gestion des ERP et IHM Lourdes (ex: Sylob)
 - **Privilégier le JS/XPath** : Ne pas utiliser le scroll souris (`mouse_wheel`) sur les arborescences denses qui saturent le DOM. Utiliser `click` via JS ou sélections directes.
 - **Seuil d'Abandon (Time-out)** : Si l'IHM sature le navigateur après 3-4 tentatives, s'arrêter et proposer immédiatement une alternative (Saisie manuelle courte ou Fallback).
 - **Extraction vs Saisie** : Préférer l'extraction de données existantes (PDF, fichiers) plutôt que la navigation complexe en ERP si le but est identique.
@@ -60,42 +49,43 @@
 - **Scripts de Lancement Robustes** : Dans les fichiers .bat, éviter les commandes réseau bloquantes (pip install sans --quiet) qui empêchent le démarrage hors-ligne.
 - **Vérification de Syntaxe Locale** : Exécuter python -m py_compile avant tout commit pour garantir la validité du code.
 - **Confidentialité** : S'assurer que les fichiers .env ou *.db locaux sont bien exclus via .gitignore.
+- **Préservation du Contexte IA (RTK)** : Utiliser systématiquement l'outil RTK (Rust Token Killer) ou réduire au maximum le bruit du terminal lors de l'exécution de longs scripts (ex: ETL). Supprimer les logs de progression, les prints dans des boucles lourdes ou le boilerplate console pour économiser les tokens de la fenêtre de contexte.
 
-## 10. Règles Azure & Infrastructure (IaC)
+## 10. Règles Azure & Infrastructure (IaC) - Standards TB-Groupe (NUBO)
 
-### Gouvernance et Conformité (Policies)
-- **Localisation** : Les ressources doivent être exclusivement en North Europe.
-- **Tags Obligatoires** : Appliquer les tags `deployment` (IaC ou Manuel) et `project`.
-- **Naming Convention** : Respecter `ResourcePrefix-Project-FeatureName-Environnement` (prod ou dev).
-- **Logs** : Envoi automatique vers le Workspace `log-platform-logs-prd`.
+### Architecture Sylob Azure (dtpf-prod)
+- **Serveur PostgreSQL Flexible** : `psql-dtpf-psql-prod.postgres.database.azure.com`
+- **Base de données** : `dtpf_sylob_prod` (Port 5432).
+- **Réseau** : Accès privé via VNet `vnet-dtpf-network-prod`. IP Privée : `172.31.2.4`.
+- **Naming** : Respecter `<Prefix>-<Project>-<Feature>-<Env>`.
+- **Tags Obligatoires** : `project`, `deployment` (IaC), `owner` (email valide).
+- **Logs** : Envoi central vers `log-platform-logs-prod`.
 
-### Automatisation CI/CD (GitHub Actions)
-- **Template** : Utiliser le repository Templates pour le workflow terraform-plan -> approval -> terraform-action.
-- **Validation** : Une issue GitHub est générée ; un commentaire (approve, yes, lgtm) est requis sous 10 min.
-- **Runners** : `ubuntu-latest` par défaut. `self-hosted` (vm-dtpf-githubrunner-dev) pour le réseau privé ou dépassement de quota.
-- **Variables** : Utiliser `oNaiPs/secrets-to-env-action` pour injecter les variables GitHub en variables d'environnement.
+### Connectivité & VPN (Hub & Spoke)
+- **Tunnel** : VPN Site-to-Site entre Firewall bureau (Stormshield) et Hub Azure.
+- **Réseaux Autorisés** :
+    - `192.168.102.0/24` (Serveur FTP)
+    - `192.168.104.0/24` (Postes bureau Anthony)
+    - `172.31.5.0/24` (Pool VPN P2S)
+- **Règle Cruciale** : Toute nouvelle plage réseau doit être déclarée dans la **Local Network Gateway** `lgw-platform-networkhub-tb-prod`.
 
-### Standards Terraform & Landing Zones
-- **Structure** : Dossier `/Terraform` à la racine avec `variables.auto.tfvars`.
-- **Tokenisation** : Utiliser la syntaxe `@#{MA_VAR}#@` pour les remplacements dynamiques.
-- **Modularité** : Utiliser le submodule `mod-landing-zone` pour le socle (VNet, KV, Storage).
-- **Backend** : Stockage des tfstates dans `stplatformtfstatestbprod` (container tfstates).
+## 11. Dictionnaire de Données (Sylob DWH)
+- **Périmètre Actuel** : ~48 tables déversées dans Azure.
+- **Nomenclature** :
+    - `alz_...` : Tables préparées pour la BI MyReport.
+    - `ssylob9_...` : Données sources brutes Sylob 9.
+- **Absence** : Les modules QHSE, RH, SAV et Logistique complexe sont actuellement filtrés et absents d'Azure.
 
-### Sécurité et PostgreSQL
-- **Identité** : Utilisation stricte des Service Principals (SP) par environnement (ex: `az-sp-dtpf-dev`).
-- **Secrets** : Stockage dans les Key Vaults de projet. Renouvellement des secrets SP tous les 90 jours via redéploiement.
-- **PostgreSQL FinOps** : Arrêter le serveur de dev (psql-dtpf-psql-dev) hors heures ouvrées. Maintenance automatisée le dimanche à minuit.
-- **Résolution DNS** : Configurer manuellement le fichier hosts pour les serveurs partagés (ex: IP 172.31.2.4 pour la prod).
+## 12. Résilience et Migration Cross-Platform
+- **Chemins de fichiers** : Interdiction des chemins statiques Windows. Utiliser `os.path.join()` et `pathlib` pour compatibilité Linux/Azure.
+- **Fallback APIs** : Implémenter des modes dégradés si les APIs comme Gemini sont isolées par les politiques réseau de la Landing Zone.
 
 ## Gestion des Tâches
-- **Planifier d'abord** : Écrire le plan dans `tasks/todo.md` avec des éléments cochables.
-- **Vérifier le Plan** : Valider avec l'utilisateur avant l'implémentation.
-- **Suivre la Progression** : Cocher les éléments au fur et à mesure.
-- **Expliquer les Changements** : Résumé à chaque étape.
-- **Documenter les Résultats** : Ajouter une section révision dans `tasks/todo.md`.
+- **Planifier d'abord** : Écrire le plan dans `tasks/todo.md`.
+- **Vérifier le Plan** : Valider avec l'utilisateur avant action.
 - **Capturer les Leçons** : Mettre à jour `tasks/lessons.md` après chaque session.
 
 ---
 
 > [!IMPORTANT]
-> **Interdiction de Modification** : Ce fichier `SYSTEM_PROMPT.md` ne doit être modifié sous aucun prétexte sans la permission explicite de l'utilisateur.
+> **Interdiction de Modification** : Ce fichier reste la source de vérité pour le mode opératoire et la structure technique. Toute modification doit être justifiée.
