@@ -80,6 +80,18 @@
 - **Chemins de fichiers** : Interdiction des chemins statiques Windows. Utiliser `os.path.join()` et `pathlib` pour compatibilité Linux/Azure.
 - **Fallback APIs** : Implémenter des modes dégradés si les APIs comme Gemini sont isolées par les politiques réseau de la Landing Zone.
 
+## 13. Monorepo AIOps (JeanMichel) & Cartographie des Données
+- **Architecture Agentique** : `JeanMichel` est l'orchestrateur central (LangChain). Il lie Google Chat (`src/gateway/`) à l'écosystème data.
+- **Cartographie DWH (MyReport)** : Les correspondances de tables (de `ssylob9_` vers `alz_`) se lisent dans `data/dictionaries/DWH_Nouvelle_Version_Dictionnaire.csv`.
+- **API & Outils Spécialisés** :
+  - **Akeneo PIM** : L'accès aux API produits est géré dans `src/tools/shopify/akeneo_helper.py` (Authentification Base64).
+  - **Shopify** : Les scripts de Cross-Selling sont dans `src/tools/shopify/`.
+  - **n8n** : Outils de workflow métiers externes pilotés via webhooks par l'Orchestrateur.
+- **Tracabilité MLFlow** : Toutes les expériences locales de tout projet pointent vers `sqlite:///data/mlflow.db`.
+
+## 14. Sources de Données Officielles (MCP)
+- **Privilège Data.gouv** : Pour tout enrichissement de données externes, juridiques ou administratives (ex: Legifrance, Sirene), l'agent DOIT privilégier en priorité absolue l'utilisation des serveurs **MCP (Model Context Protocol) connectés à data.gouv.fr** ou Piste avant d'utiliser une recherche web classique (Tavily/Google).
+
 ## Gestion des Tâches
 - **Planifier d'abord** : Écrire le plan dans `tasks/todo.md`.
 - **Vérifier le Plan** : Valider avec l'utilisateur avant action.
