@@ -35,8 +35,7 @@ class SylobAPI:
         self.password = os.getenv("SYLOB_PASS")
         self.unite_pers = os.getenv("SYLOB_UNITE_PERS")
         self.session_id = os.getenv("SYLOB_SESSION_ID")
-        self.base_url = os.getenv("SYLOB_BASE_URL")
-        self.base_url1 = os.getenv("SYLOB_BASE_URL1", "") # Ajout de la 2ème URL
+        self.base_url1 = os.getenv("SYLOB_BASE_URL1", "") # Utilisation exclusive de RECEPTIONAPI
         
         # Préparation du header d'authentification Basic
         self.headers = self._build_headers()
@@ -48,64 +47,12 @@ class SylobAPI:
         token = base64.b64encode(userpass).decode("ascii")
         return {"Authorization": f"Basic {token}"}
 
-    def chercher_article(self, ean13):
-        """Interroge l'API Sylob pour un EAN13 donné"""
-        if not self.base_url:
-            logging.error("URL Sylob non configurée dans le .env")
-            return None
-
-        params = {"limite": "1", "EAN13": ean13}
-        
-        try:
-            logging.info(f"Interrogation API Sylob pour EAN : {ean13}")
-            response = requests.get(
-                self.base_url,
-                params=params,
-                headers=self.headers,
-                verify=False, # Pour le certificat interne srv-erp
-                timeout=5      # On ne veut pas bloquer l'app trop longtemps
-            )
-            response.raise_for_status()
-            
-            return self._parser_xml(response.text)
-            
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Erreur lors de l'appel API Sylob : {e}")
-            return None
-
-    def _parser_xml(self, xml_text):
-        """Extrait Code, Désignation et GTIN du XML de réponse"""
-        try:
-            root = ET.fromstring(xml_text)
-            ligne = root.find(".//ligneResultatWS")
-            
-            if ligne is None:
-                return None
-
-            valeurs = ligne.findall("valeur")
-            if len(valeurs) < 3:
-                return None
-
-            return {
-                'ref': (valeurs[0].text or "").strip(),
-                'designation': (valeurs[1].text or "").strip(),
-                'ean': (valeurs[2].text or "").strip(),
-                'source': 'Sylob API'
-            }
-        except ET.ParseError as e:
-            logging.error(f"Erreur de parsing XML Sylob : {e}")
-            return None
-
     def chercher_lot_par_po(self, po: str, art: str = "", lot: str = "", ean: str = ""):
         """Interroge l'API Sylob pour trouver le lot correspondant à un numéro de commande (PO) et article"""
-        
         url = self.base_url1
         if not url:
-            # Fallback historique si la 2ème URL n'est pas dans le .env
-            if self.base_url:
-                url = self.base_url.replace("API_ART_EAN", "RECEPTIONAPI")
-            else:
-                return None
+            logging.error("URL Sylob RECEPTIONAPI non configurée")
+            return None
         
         # La nouvelle requête attend CMD, ART, LOT et EAN
         params = {"limite": "1", "CMD": po, "ART": art, "LOT": lot, "EAN": ean}
@@ -153,4 +100,4 @@ if __name__ == "__main__":
     # Test local
     logging.basicConfig(level=logging.INFO)
     api = SylobAPI()
-    print("Résultat test :", api.chercher_article("3118220054967"))
+    print("API Sylob initialisée.")

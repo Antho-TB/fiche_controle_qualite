@@ -88,20 +88,10 @@ class DataLoader:
 
     def chercher_article(self, code):
         """
-        Recherche un article. Ordre de priorité :
-        1. API Sylob (Temps réel)
-        2. EAN exact dans le CSV
-        3. Référence exacte dans le CSV
-        4. Recherche partielle dans le CSV (coeur de code)
+        Recherche un article.
+        Désormais, la recherche initiale se fait uniquement dans le CSV local,
+        car la validation Sylob (et récupération de détails étendus) se fera via RECEPTIONAPI par la suite.
         """
-        # --- PRIORITÉ 1 : API SYLOB (si le code ressemble à un EAN) ---
-        if code.isdigit() and len(code) >= 8:
-            article_sylob = self.sylob.chercher_article(code)
-            if article_sylob:
-                logging.info(f"Article récupéré en direct de Sylob : {article_sylob['designation']}")
-                return article_sylob
-
-        # --- FALLBACK : RECHERCHE DANS LE CSV LOCAL ---
         if self.df is None:
             return None
 
