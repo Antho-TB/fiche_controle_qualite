@@ -53,8 +53,11 @@ class ExcelHandler:
 
             # --- Saisie des données dans les cellules (Ajustement final) ---
             
-            # 1. Date de réception (F4)
-            ws['F4'] = now.strftime("%d/%m/%Y")
+            # 1. Date de réception (B4)
+            ws['B4'] = now.strftime("%d/%m/%Y")
+            
+            # Date de contrôle (D4)
+            ws['D4'] = now.strftime("%d/%m/%Y")
             
             # 2. Référence Article (B5)
             ws['B5'] = article_info['ref']
@@ -71,6 +74,11 @@ class ExcelHandler:
             # 6. Vider la colonne H (effacer le contenu de H5 a H50 par precaution)
             for row in range(5, 51):
                 ws[f'H{row}'] = None
+                
+            # Fournisseur (A9) -> Produit France
+            fournisseur = article_info.get('fournisseur', '')
+            if fournisseur:
+                ws['A9'] = f"Fournisseur : {fournisseur}"
 
             
             # Sauvegarde du nouveau fichier

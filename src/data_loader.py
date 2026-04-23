@@ -73,8 +73,9 @@ class DataLoader:
             )
             
             # Renommage des colonnes pour plus de clarté
-            # On s'attend à : 0=Référence, 1=EAN, 2=Désignation, 3=Lot, 4=PO
-            self.df.columns = ['ref', 'ean', 'designation', 'lot', 'po']
+            # On s'attend à : 0=Référence, 1=EAN, 2=Désignation, 3=Lot, 4=PO, 5=EAN SPCB, 6=EAN PCB, 7=HO
+            cols = ['ref', 'ean', 'designation', 'lot', 'po', 'ean_spcb', 'ean_pcb', 'ho']
+            self.df.columns = cols[:len(self.df.columns)]
             
             # Nettoyage des espaces superflus (trim)
             for col in self.df.columns:

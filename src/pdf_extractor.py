@@ -50,38 +50,61 @@ class PDFExtractor:
             for page in reader.pages:
                 text += page.extract_text() + "\n"
 
-            # 1. Extraction des PO et Lots de l'en-tête
-            po_header_match = re.search(r"PO\s*#\s*:\s*([\d、]+)", text)
-            lot_header_match = re.search(r"N[°º]\s*Lot\s*[：:]\s*([\d、]+)", text)
+            lines = [l.strip() for l in text.split("\n") if l.strip()]
+            fournisseur = ""
+            if lines and "BILL TO" not in lines[0].upper() and "PACKING LIST" not in lines[0].upper():
+                fournisseur = lines[0].strip()
+
+            # Global PO and Lot (if present in header)
+            global_po = ""
+            global_lot = ""
             
-            if not po_header_match or not lot_header_match:
-                logging.warning(f"En-tête PO/Lot introuvable dans {pdf_path}")
-                return
-                
-            po_list = [po.strip() for po in po_header_match.group(1).split("、")]
-            lot_list = [lot.strip() for lot in lot_header_match.group(1).split("、")]
-            
-            # Mapping positionnel PO -> Lot
-            po_to_lot = dict(zip(po_list, lot_list))
-            
-            # 2. Recherche des articles dans les lignes
-            # Format: PO:00162322821520000021970001
-            # 00162322 = PO | 8215200000 = Code H.S | 21970001 = Code Article interne (ou partie)
-            lines = text.split("\n")
+            po_header_match = re.search(r"(?i)PO\s*#\s*[:：]\s*([\d、]+)", text)
+            if po_header_match:
+                global_po = po_header_match.group(1).split("、")[0]
+            elif re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text):
+                global_po = re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text).group(1)
+
+            lot_header_match = re.search(r"(?i)N[°º]\s*Lot\s*[:：]\s*([\d、]+)", text)
+            if lot_header_match:
+                global_lot = lot_header_match.group(1).split("、")[0]
+
+            # Parse line by line to find item specific PO/Lot
             for line in lines:
-                match = re.search(r"(?i)po:\s*(\d{8})(\d{10})?(\d+)?\s*(.*)", line)
-                if match:
-                    po = match.group(1)
-                    art_code = match.group(3)
+                po, lot, art_code = global_po, global_lot, ""
+                
+                # Format 1: PO:00169477821520000032000006
+                m1 = re.search(r"(?i)po:\s*(\d{8})(\d{10})?(\d{6,})", line)
+                if m1:
+                    po = m1.group(1)
+                    art_code = m1.group(3)
+                
+                # Format 2: PO# 00017062/MEN#25102 10020313
+                m2 = re.search(r"(?i)PO#\s*(\d+)/MEN#(\d+)\s+(\d{6,})", line)
+                if m2:
+                    po = m2.group(1)
+                    lot = m2.group(2)
+                    art_code = m2.group(3)
                     
-                    if art_code:
-                        lot = po_to_lot.get(po, "")
-                        # On stocke l'information pour l'associer au scan plus tard
-                        if art_code not in self.articles_pdf:
-                            self.articles_pdf[art_code] = []
-                        info = {"po": po, "lot": lot}
-                        if info not in self.articles_pdf[art_code]:
-                            self.articles_pdf[art_code].append(info)
+                # Format 3: 00161343 25053 21870001 (PO Lot Item)
+                m3 = re.search(r"^(\d{8})\s+(\d{4,6})\s+(\d{6,})", line)
+                if m3:
+                    po = m3.group(1)
+                    lot = m3.group(2)
+                    art_code = m3.group(3)
+                    
+                # Format 4: 40110011 MANDOLINE SLICER... where 40110011 is item code
+                m4 = re.search(r"^(\d{6,})\s+[A-Za-z]+", line)
+                if m4 and not art_code:
+                    art_code = m4.group(1)
+
+                if art_code:
+                    if art_code not in self.articles_pdf:
+                        self.articles_pdf[art_code] = []
+                    info = {"po": po, "lot": lot, "fournisseur": fournisseur}
+                    if info not in self.articles_pdf[art_code]:
+                        self.articles_pdf[art_code].append(info)
+                        
             logging.info(f"Extraction PDF terminée pour {os.path.basename(pdf_path)}")
             
         except Exception as e:

@@ -77,15 +77,27 @@ def lancer_session_scan():
                         
                 print(f"[OK] Article identifié : {article['designation']}")
                 print(f"     Référence : {article['ref']}")
+                
+                ean_spcb = article.get('ean_spcb', '')
+                ean_pcb = article.get('ean_pcb', '')
+                ho = article.get('ho', '')
+                if ean_spcb or ean_pcb or ho:
+                    print(f"     [Infos Complémentaires] ", end="")
+                    if ean_spcb: print(f"EAN SPCB: {ean_spcb} | ", end="")
+                    if ean_pcb: print(f"EAN PCB: {ean_pcb} | ", end="")
+                    if ho: print(f"HO (Carrefour): {ho}", end="")
+                    print()
 
                 import time
                 for idx, infos in enumerate(infos_list):
                     po = infos.get('po', '')
                     lot = infos.get('lot', '')
+                    fournisseur = infos.get('fournisseur', '')
                     
                     article_clone = article.copy()
                     article_clone['po'] = po
                     article_clone['lot'] = lot
+                    article_clone['fournisseur'] = fournisseur
                     
                     # Validation Sylob
                     validation_sylob = False
