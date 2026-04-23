@@ -56,8 +56,8 @@ class ExcelHandler:
             # 1. Date de réception (B4)
             ws['B4'] = now.strftime("%d/%m/%Y")
             
-            # Date de contrôle (D4)
-            ws['D4'] = now.strftime("%d/%m/%Y")
+            # Date de contrôle (F4)
+            ws['F4'] = now.strftime("%d/%m/%Y")
             
             # 2. Référence Article (B5)
             ws['B5'] = article_info['ref']
