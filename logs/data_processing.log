@@ -166,3 +166,16 @@
 2026-03-16 11:07:42,875 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
 2026-03-16 11:32:08,620 - WARNING - Fichier CSV de fallback introuvable : C:\Users\abezille\dev\fiche_de_controle\0_Modele_Et_Donnees\article.csv. Utilisation exclusive de l'API Sylob.
 2026-03-16 11:32:08,620 - INFO - Aucun PDF trouvé dans C:\Users\abezille\dev\fiche_de_controle\1_Packing_Lists_A_Traiter
+2026-04-23 16:01:34,660 - INFO - Base article chargée avec succès : 2 articles.
+2026-04-23 16:01:34,660 - INFO - Lecture automatique de 7 fichier(s) PDF...
+2026-04-23 16:01:35,008 - INFO - Extraction PDF terminée pour PL-SZSE2514313-JYSU2003705.pdf
+2026-04-23 16:01:35,111 - INFO - Extraction PDF terminée pour PL-SZSE2601587-CMAU5744735.pdf
+2026-04-23 16:01:35,281 - INFO - Extraction PDF terminée pour PL-SZSE2601806-CMAU5744735.pdf
+2026-04-23 16:01:35,407 - INFO - Extraction PDF terminée pour PL-SZSE2601807-RESU2004119.pdf
+2026-04-23 16:01:35,421 - INFO - Extraction PDF terminée pour PL-SZSE2601808-RESU2004119.pdf
+2026-04-23 16:01:35,538 - INFO - Extraction PDF terminée pour PL-SZSE2601964-CMAU7538142.pdf
+2026-04-23 16:01:35,681 - INFO - Extraction PDF terminée pour PL-SZSE2602436-TLLU4162583.pdf
+2026-04-23 16:01:45,294 - INFO - Article trouvé dans le CSV : Article de Test (Historique)
+2026-04-23 16:01:45,295 - INFO - Interrogation API Sylob RECEPTIONAPI pour PO:PO-TEST-001, ART:10120098, LOT:LOT-TEST-001
+2026-04-23 16:01:45,462 - INFO - Aucun lot trouvé dans Sylob pour le PO : PO-TEST-001
+2026-04-23 16:01:45,736 - INFO - Fiche générée avec succès : C:\Users\abezille\dev\fiche_de_controle\2_Fiches_Creees\Fiche_10120098_LOT-TEST-001_20260423_160145.xlsx

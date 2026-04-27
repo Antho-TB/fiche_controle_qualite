@@ -5,20 +5,8 @@ import requests
 import urllib3
 import xml.etree.ElementTree as ET
 import logging
-from dotenv import load_dotenv
-
-def get_base_path():
-    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-
-# Chargement explicite du .env situé à la racine de l'exécutable
-env_path = os.path.join(get_base_path(), '.env')
-if os.path.exists(env_path):
-    load_dotenv(dotenv_path=env_path)
-else:
-    load_dotenv() # Fallback standard
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 # Désactivation des avertissements pour les certificats SSL auto-signés
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -30,12 +18,23 @@ class SylobAPI:
     """
     
     def __init__(self):
-        # Récupération des paramètres depuis le .env
-        self.user = os.getenv("SYLOB_USER")
-        self.password = os.getenv("SYLOB_PASS")
-        self.unite_pers = os.getenv("SYLOB_UNITE_PERS")
-        self.session_id = os.getenv("SYLOB_SESSION_ID")
-        self.base_url1 = os.getenv("SYLOB_BASE_URL1", "") # Utilisation exclusive de RECEPTIONAPI
+        # --- Standard NUBO : Authentification Azure Key Vault ---
+        vault_url = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
+        try:
+            credential = DefaultAzureCredential()
+            client = SecretClient(vault_url=vault_url, credential=credential)
+            self.user = client.get_secret("SYLOB-USER").value
+            self.password = client.get_secret("SYLOB-PASS").value
+            self.unite_pers = client.get_secret("SYLOB-UNITE-PERS").value
+            self.session_id = client.get_secret("SYLOB-SESSION-ID").value
+            self.base_url1 = client.get_secret("SYLOB-BASE-URL1").value
+        except Exception as e:
+            logging.error(f"[NUBO SEC] Erreur de récupération des secrets Sylob depuis AKV : {e}")
+            self.user = ""
+            self.password = ""
+            self.unite_pers = ""
+            self.session_id = ""
+            self.base_url1 = ""
         
         # Préparation du header d'authentification Basic
         self.headers = self._build_headers()

@@ -79,3 +79,10 @@ Afin d'assurer la traçabilité des modifications, voici l'historique des diffé
 
 > [!IMPORTANT]
 > Avant un grand déploiement inter-équipes, il est recommandé de tester l'application en simulant une coupure réseau pour confirmer la fluidité du comportement de secours (fallback).
+
+---
+> [!IMPORTANT]
+> **Sécurité & Standards (NUBO / MLOps)** : 
+> L'utilisation de fichiers `.env` en production est strictement proscrite. 
+> La gestion des secrets (API, Base de données) doit obligatoirement passer par **Azure Key Vault**.
+> L'authentification des ressources s'effectue via **Entra ID (Managed Identity)** géré exclusivement par Terraform.
