@@ -1,3 +1,19 @@
+"""
+[ARCHITECTURE] Interfaçage ERP (fiche_de_controle)
+
+Rôle global :
+Ce module gère les communications réseau avec l'ERP Sylob (via son API REST/XML).
+Il permet d'interroger la base centrale de l'entreprise pour valider les numéros de Commande (PO)
+et de Lots détectés par l'extracteur PDF.
+
+Stratégie métier (Zero Trust & Secret Management) :
+Pour respecter la doctrine Nubo, aucun secret (user, mot de passe, session) n'est stocké en dur.
+Ils sont récupérés à la volée depuis Azure Key Vault via une Managed Identity ou l'Azure CLI de 
+l'utilisateur. Le certificat SSL interne de Sylob étant potentiellement auto-signé, nous désactivons 
+(temporairement) l'avertissement de sécurité SSL localement, tout en conservant une authentification
+robuste via Basic Auth en Base64.
+"""
+
 import os
 import sys
 import base64
@@ -13,8 +29,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class SylobAPI:
     """
-    Gestionnaire pour interroger l'API REST de l'ERP Sylob.
-    Permet de récupérer les informations d'un article à partir de son EAN13.
+    Client de l'API REST de l'ERP Sylob (Endpoint RECEPTIONAPI).
     """
     
     def __init__(self):
@@ -36,67 +51,74 @@ class SylobAPI:
             self.session_id = ""
             self.base_url1 = ""
         
-        # Préparation du header d'authentification Basic
         self.headers = self._build_headers()
 
-    def _build_headers(self):
-        """Construit le header d'autorisation Basic Base64"""
+    def _build_headers(self) -> dict:
+        """
+        Construit le header d'autorisation Basic Base64 exigé par Sylob.
+        """
         login = f"{self.user}@@{self.unite_pers}@@{self.session_id}"
         userpass = f"{login}:{self.password}".encode("utf-8")
         token = base64.b64encode(userpass).decode("ascii")
         return {"Authorization": f"Basic {token}"}
 
-    def chercher_lot_par_po(self, po: str, art: str = "", lot: str = "", ean: str = ""):
-        """Interroge l'API Sylob pour trouver le lot correspondant à un numéro de commande (PO) et article"""
+    def chercher_lot_par_po(self, po: str, art: str = "", lot: str = "", ean: str = "") -> str:
+        """
+        Interroge l'API Sylob pour valider l'existence d'un lot et d'une commande.
+        
+        Stratégie :
+        L'API retourne un XML (et non du JSON). On utilise ElementTree pour extraire
+        précisément le noeud <ligneResultatWS> et valider que l'ERP a bien connaissance
+        de cette livraison imminente. En cas de timeout (latence Sylob), on déclenche un 
+        fallback propre sans faire exploser l'application métier.
+        
+        Args:
+            po (str): Numéro de Purchase Order.
+            art (str): Référence interne.
+            lot (str): Numéro de Batch/Lot fournisseur.
+            ean (str): Code barres EAN.
+            
+        Returns:
+            str: Le lot validé par l'ERP, ou None si échec.
+        """
         url = self.base_url1
         if not url:
-            logging.error("URL Sylob RECEPTIONAPI non configurée")
+            logging.error("[ERREUR] URL Sylob RECEPTIONAPI non configurée.")
             return None
         
-        # La nouvelle requête attend CMD, ART, LOT et EAN
         params = {"limite": "1", "CMD": po, "ART": art, "LOT": lot, "EAN": ean}
         
         try:
-            logging.info(f"Interrogation API Sylob RECEPTIONAPI pour PO:{po}, ART:{art}, LOT:{lot}")
+            logging.info(f"[API] Interrogation Sylob (PO:{po}, ART:{art}, LOT:{lot})")
             response = requests.get(
                 url,
                 params=params,
                 headers=self.headers,
-                verify=False,
-                timeout=5
+                verify=False, # Certificat auto-signé interne
+                timeout=5 # Fail-fast pour ne pas bloquer l'opérateur en entrepôt
             )
             response.raise_for_status()
             
-            # Parser XML pour le Lot
             root = ET.fromstring(response.text)
             ligne = root.find(".//ligneResultatWS")
             
             if ligne is None:
-                logging.info(f"Aucun lot trouvé dans Sylob pour le PO : {po}")
+                logging.info(f"[INFO] Aucun lot trouvé dans Sylob pour le PO : {po}")
                 return None
                 
             valeurs = ligne.findall("valeur")
             
-            # Le lot est supposé être retourné par la requête
-            # Vu qu'on a sélectionné "Numéro de la commande" puis "Numéro de lot"
             if len(valeurs) >= 2:
-                # Si la valeur 0 est le PO, la valeur 1 est le lot
-                lot = (valeurs[1].text or "").strip()
-                return lot
+                # La requête retourne généralement le PO puis le Lot.
+                return (valeurs[1].text or "").strip()
             elif len(valeurs) == 1:
                 return (valeurs[0].text or "").strip()
             
             return None
             
         except requests.exceptions.RequestException as e:
-            logging.warning(f"Avertissement lors de l'appel API Sylob (Lot PO), passage au PDF : {e}")
+            logging.warning(f"[ALERTE] Timeout ou erreur réseau Sylob, fallback sur les données PDF : {e}")
             return None
         except ET.ParseError as e:
-            logging.warning(f"Avertissement de parsing XML Sylob (Lot), passage au PDF : {e}")
+            logging.warning(f"[ALERTE] Le format XML de retour Sylob est invalide, fallback PDF : {e}")
             return None
-
-if __name__ == "__main__":
-    # Test local
-    logging.basicConfig(level=logging.INFO)
-    api = SylobAPI()
-    print("API Sylob initialisée.")

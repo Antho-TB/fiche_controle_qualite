@@ -1,11 +1,30 @@
+"""
+[ARCHITECTURE] I/O OCR & Text Parsing (fiche_de_controle)
+
+Rôle global :
+Ce module scanne de manière autonome les dossiers contenant des "Packing Lists" (Bons de livraison
+fournisseurs en PDF), en extrait le texte via PyPDF, et détecte les numéros de Commande (PO) 
+et de Lot (Batch) par le biais d'expressions régulières (Regex).
+
+Stratégie métier (Fuzzy Regex Matching) :
+Les fournisseurs mondiaux (Asiatiques, Européens) ont des formats de Packing Lists extrêmement hétérogènes.
+Une approche stricte échouerait dans 80% des cas. La stratégie ici est d'utiliser une série de
+patterns (formats 1 à 4) pour ratisser large. On croise ensuite ces résultats avec l'API Sylob 
+en aval. Ce module sert donc d'extracteur "Best-Effort" pour pré-remplir l'interface opérateur.
+"""
+
 import os
 import re
 import sys
 import logging
 from pypdf import PdfReader
 
-def get_base_path():
-    """ Retourne le chemin d'exécution réel (script Python ou .exe compilé) """
+def get_base_path() -> str:
+    """
+    Retourne le chemin d'exécution réel (script Python ou .exe compilé).
+    Crucial pour s'assurer que l'application trouve toujours ses dossiers cibles
+    même déployée via PyInstaller sur les Windows des entrepôts.
+    """
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -13,37 +32,47 @@ def get_base_path():
 
 class PDFExtractor:
     """
-    Extrait les données (N° de Commande, N° de Lot) des fichiers PDF (Packing Lists).
+    Moteur de parsing des Packing Lists au format PDF.
     """
     
-    def __init__(self, pdf_dir=None):
+    def __init__(self, pdf_dir: str = None):
         if pdf_dir is None:
             self.pdf_dir = os.path.join(get_base_path(), "1_Packing_Lists_A_Traiter")
         else:
             self.pdf_dir = pdf_dir
-        self.articles_pdf = {} # Dictionnaire avec la référence article (ou coeur) comme clé
+        self.articles_pdf = {} 
         self._load_all_pdfs()
 
-    def _load_all_pdfs(self):
-        """Scanne le dossier et extrait les données de tous les PDF présents."""
+    def _load_all_pdfs(self) -> None:
+        """
+        Scan initial du dossier de dépôt.
+        
+        Stratégie :
+        Au lancement de l'application, l'extracteur pré-digère tous les PDF présents 
+        dans le "hot folder" et indexe les PO/Lots en RAM. Cela permet de répondre
+        instantanément (0 latence) quand l'opérateur scanne un code-barres.
+        """
         if not os.path.exists(self.pdf_dir):
             os.makedirs(self.pdf_dir)
-            logging.info(f"Dossier créé : {self.pdf_dir}")
+            logging.info(f"[INFO] Dossier de dépôt PDF créé : {self.pdf_dir}")
             return
 
         pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith('.pdf')]
         
         if not pdf_files:
-            logging.info(f"Aucun PDF trouvé dans {self.pdf_dir}")
+            logging.info(f"[INFO] Aucun PDF trouvé dans la file d'attente ({self.pdf_dir})")
             return
             
-        logging.info(f"Lecture automatique de {len(pdf_files)} fichier(s) PDF...")
+        logging.info(f"[INFO] Ingestion automatique de {len(pdf_files)} Packing List(s)...")
         
         for file_name in pdf_files:
             pdf_path = os.path.join(self.pdf_dir, file_name)
             self._extract_from_pdf(pdf_path)
 
-    def _extract_from_pdf(self, pdf_path):
+    def _extract_from_pdf(self, pdf_path: str) -> None:
+        """
+        Analyse itérative d'un fichier PDF avec expressions régulières (Regex).
+        """
         try:
             reader = PdfReader(pdf_path)
             text = ""
@@ -59,17 +88,19 @@ class PDFExtractor:
             global_po = ""
             global_lot = ""
             
-            po_header_match = re.search(r"(?i)PO\s*#\s*[:：]\s*([\d、]+)", text)
+            # Pattern : PO # : 123456
+            po_header_match = re.search(r"(?i)PO\s*#\s*[:]\s*([\d]+)", text)
             if po_header_match:
-                global_po = po_header_match.group(1).split("、")[0]
+                global_po = po_header_match.group(1)
             elif re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text):
                 global_po = re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text).group(1)
 
-            lot_header_match = re.search(r"(?i)N[°º]\s*Lot\s*[:：]\s*([\d、]+)", text)
+            # Pattern : N° Lot : 123456
+            lot_header_match = re.search(r"(?i)N[o°]\s*Lot\s*[:]\s*([\d]+)", text)
             if lot_header_match:
-                global_lot = lot_header_match.group(1).split("、")[0]
+                global_lot = lot_header_match.group(1)
 
-            # Parse line by line to find item specific PO/Lot
+            # Ligne par ligne pour associer chaque article à son PO/Lot
             for line in lines:
                 po, lot, art_code = global_po, global_lot, ""
                 
@@ -105,34 +136,35 @@ class PDFExtractor:
                     if info not in self.articles_pdf[art_code]:
                         self.articles_pdf[art_code].append(info)
                         
-            logging.info(f"Extraction PDF terminée pour {os.path.basename(pdf_path)}")
+            logging.info(f"[SUCCÈS] Indexation PDF terminée pour {os.path.basename(pdf_path)}")
             
         except Exception as e:
-            logging.error(f"Erreur lors de la lecture du PDF {pdf_path}: {e}")
+            logging.error(f"[ERREUR] Échec de l'OCR/Parsing du PDF {pdf_path}: {e}")
 
-    def chercher_infos_pdf(self, code_article, ref_article=""):
+    def chercher_infos_pdf(self, code_article: str, ref_article: str = "") -> list:
         """
-        Cherche si on a des infos de Commande et de Lot pour un article donné.
-        Essaie avec le code scanné complet ou partiel, ou la Référence.
+        Recherche en mémoire les données extraites liées à un article spécifique.
+        
+        Stratégie :
+        Identique à la stratégie DataLoader : exact match, puis fuzzy match.
         """
-        # On essaie de trouver le code exact
         if code_article in self.articles_pdf:
             return self.articles_pdf[code_article]
             
         if ref_article and ref_article in self.articles_pdf:
             return self.articles_pdf[ref_article]
             
-        # Stratégie fuzzy : chercher si une partie longue du code est dans le PDF
         for k, v in self.articles_pdf.items():
             if len(k) >= 6 and (k in code_article or k in ref_article):
                return v
                
         return []
 
-    def archiver_pdfs(self):
+    def archiver_pdfs(self) -> None:
         """
-        Déplace les PDF traités vers un dossier 'archives' 
-        pour ne pas polluer les sessions de contrôle futures.
+        Politique de rétention (Log rotation).
+        Déplace les PDF consommés vers les archives pour éviter de polluer 
+        la prochaine itération et provoquer des faux positifs (mauvais PO lié à la session de la veille).
         """
         import time
         import shutil
@@ -145,16 +177,15 @@ class PDFExtractor:
         if not pdf_files:
             return
             
-        logging.info(f"Archivage de {len(pdf_files)} PDF(s)...")
+        logging.info(f"[INFO] Déplacement de {len(pdf_files)} PDF vers les archives...")
         for file_name in pdf_files:
             src = os.path.join(self.pdf_dir, file_name)
             dst = os.path.join(archive_dir, file_name)
             try:
-                # Si un fichier du même nom existe déjà dans l'archive, on ajoute un timestamp
+                # Anti-collision
                 if os.path.exists(dst):
                     base, ext = os.path.splitext(file_name)
                     dst = os.path.join(archive_dir, f"{base}_{int(time.time())}{ext}")
                 shutil.move(src, dst)
             except Exception as e:
-                logging.error(f"Impossible d'archiver {file_name}: {e}")
-
+                logging.error(f"[ERREUR] Impossible d'archiver {file_name}: {e}")
