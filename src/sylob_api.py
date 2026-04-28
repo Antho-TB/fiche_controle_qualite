@@ -44,12 +44,28 @@ class SylobAPI:
             self.session_id = client.get_secret("SYLOB-SESSION-ID").value
             self.base_url1 = client.get_secret("SYLOB-BASE-URL1").value
         except Exception as e:
-            logging.error(f"[NUBO SEC] Erreur de récupération des secrets Sylob depuis AKV : {e}")
-            self.user = ""
-            self.password = ""
-            self.unite_pers = ""
-            self.session_id = ""
-            self.base_url1 = ""
+            # Fallback silencieux sur le .env local
+            try:
+                from dotenv import load_dotenv
+                import os, sys
+                if getattr(sys, 'frozen', False):
+                    base_path = os.path.dirname(sys.executable)
+                else:
+                    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+                load_dotenv(os.path.join(base_path, '.env'))
+                
+                self.user = os.getenv("SYLOB_USER", "")
+                self.password = os.getenv("SYLOB_PASS", "")
+                self.unite_pers = os.getenv("SYLOB_UNITE_PERS", "")
+                self.session_id = os.getenv("SYLOB_SESSION_ID", "")
+                self.base_url1 = os.getenv("SYLOB_BASE_URL1", "")
+            except Exception as env_e:
+                logging.error(f"[ERREUR] Échec du fallback .env : {env_e}")
+                self.user = ""
+                self.password = ""
+                self.unite_pers = ""
+                self.session_id = ""
+                self.base_url1 = ""
         
         self.headers = self._build_headers()
 
@@ -86,10 +102,17 @@ class SylobAPI:
             logging.error("[ERREUR] URL Sylob RECEPTIONAPI non configurée.")
             return None
         
-        params = {"limite": "1", "CMD": po, "ART": art, "LOT": lot, "EAN": ean}
+        # Replace empty strings with '%' to avoid Sylob 500 errors
+        params = {
+            "limite": "1", 
+            "CMD": po if po else "%", 
+            "ART": art if art else "%", 
+            "LOT": lot if lot else "%", 
+            "EAN": ean if ean else "%"
+        }
         
         try:
-            logging.info(f"[API] Interrogation Sylob (PO:{po}, ART:{art}, LOT:{lot})")
+            logging.info(f"[API] Interrogation Sylob (EAN:{ean}, PO:{po}, ART:{art}, LOT:{lot})")
             response = requests.get(
                 url,
                 params=params,
@@ -103,17 +126,20 @@ class SylobAPI:
             ligne = root.find(".//ligneResultatWS")
             
             if ligne is None:
-                logging.info(f"[INFO] Aucun lot trouvé dans Sylob pour le PO : {po}")
+                logging.info(f"[INFO] L'ERP Sylob n'a retourné aucune Commande (PO) ni Lot ouvert pour cet article.")
                 return None
                 
             valeurs = ligne.findall("valeur")
+            result_dict = {}
+            if len(valeurs) > 0:
+                result_dict['po'] = (valeurs[0].text or "").strip()
+            if len(valeurs) > 5:
+                # L'index 5 correspond à la colonne "Numéro" (le Lot)
+                result_dict['lot'] = (valeurs[5].text or "").strip()
             
-            if len(valeurs) >= 2:
-                # La requête retourne généralement le PO puis le Lot.
-                return (valeurs[1].text or "").strip()
-            elif len(valeurs) == 1:
-                return (valeurs[0].text or "").strip()
-            
+            if 'po' in result_dict or 'lot' in result_dict:
+                return result_dict
+                
             return None
             
         except requests.exceptions.RequestException as e:

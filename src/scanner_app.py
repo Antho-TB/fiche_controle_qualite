@@ -83,33 +83,72 @@ def lancer_session_scan() -> None:
             if article:
                 nb_scans += 1
 
-                # 3. Récupération des données fournisseur (PDF Extraction Layer)
-                infos_list = pdf_data.chercher_infos_pdf(
-                    code_article=code_scanne,
-                    ref_article=article.get('ref', '')
-                )
+                # Initialisation des variables avec priorité
+                final_po = ""
+                final_lot = ""
+                final_fournisseur = ""
                 
-                if not infos_list:
-                    # Stratégie de Fallback : On prend les données statiques du CSV
-                    po_csv = article.get('po', '')
-                    lot_csv = article.get('lot', '')
-                    if po_csv or lot_csv:
-                        infos_list = [{'po': po_csv, 'lot': lot_csv}]
-                    else:
-                        infos_list = [{'po': '', 'lot': ''}]
+                # 3. Interroge API Sylob (Priorité 1)
+                if hasattr(loader, 'sylob') and loader.sylob:
+                    try:
+                        result = loader.sylob.chercher_lot_par_po(
+                            po="", art=article.get('ref', ''), lot="", ean=code_scanne
+                        )
+                        if result:
+                            final_po = result.get('po', '')
+                            final_lot = result.get('lot', '')
+                            if final_po or final_lot:
+                                print(f"     [Sylob] Données partielles/totales récupérées depuis l'ERP : Commande {final_po} | Lot {final_lot}")
+                    except Exception as e:
+                        logging.error(f"[ERREUR] Échec de l'interrogation Sylob: {e}")
+
+                # 4. Fouille dans les PDF présents (Priorité 2 - Fallback des infos manquantes)
+                pdf_infos_list = pdf_data.chercher_infos_pdf(code_article=code_scanne, ref_article=article.get('ref', ''))
+                
+                # Si le PDF a trouvé plusieurs occurrences, on prend la première pour combler les trous
+                if pdf_infos_list:
+                    pdf_po = pdf_infos_list[0].get('po', '')
+                    pdf_lot = pdf_infos_list[0].get('lot', '')
+                    pdf_fournisseur = pdf_infos_list[0].get('fournisseur', '')
+                    
+                    added_from_pdf = []
+                    if not final_po and pdf_po: 
+                        final_po = pdf_po
+                        added_from_pdf.append(f"PO: {final_po}")
+                    if not final_lot and pdf_lot:
+                        final_lot = pdf_lot
+                        added_from_pdf.append(f"Lot: {final_lot}")
+                    if not final_fournisseur and pdf_fournisseur:
+                        final_fournisseur = pdf_fournisseur
+                        added_from_pdf.append(f"Fournisseur: {final_fournisseur}")
                         
-                print(f"[OK] Article identifié : {article['designation']}")
-                print(f"     Référence interne : {article['ref']}")
+                    if added_from_pdf:
+                        print(f"     [PDF] Fallback utilisé pour compléter : {', '.join(added_from_pdf)}")
+
+                # 5. Fallback sur article.csv (Priorité 3 - Fallback ultime)
+                csv_po = str(article.get('po', '')).replace('nan', '').strip()
+                csv_lot = str(article.get('lot', '')).replace('nan', '').strip()
+                csv_fournisseur = str(article.get('fournisseur', '')).replace('nan', '').strip()
                 
-                ean_spcb = article.get('ean_spcb', '')
-                ean_pcb = article.get('ean_pcb', '')
-                ho = article.get('ho', '')
-                if ean_spcb or ean_pcb or ho:
-                    print(f"     [Infos Complémentaires] ", end="")
-                    if ean_spcb: print(f"EAN SPCB: {ean_spcb} | ", end="")
-                    if ean_pcb: print(f"EAN PCB: {ean_pcb} | ", end="")
-                    if ho: print(f"HO (Carrefour): {ho}", end="")
-                    print()
+                added_from_csv = []
+                if not final_po and csv_po:
+                    final_po = csv_po
+                    added_from_csv.append(f"PO: {final_po}")
+                if not final_lot and csv_lot:
+                    final_lot = csv_lot
+                    added_from_csv.append(f"Lot: {final_lot}")
+                if not final_fournisseur and csv_fournisseur:
+                    final_fournisseur = csv_fournisseur
+                    added_from_csv.append(f"Fournisseur: {final_fournisseur}")
+                    
+                if added_from_csv:
+                    print(f"     [CSV] Fallback ultime utilisé depuis la base locale pour : {', '.join(added_from_csv)}")
+                    
+                if not final_po and not final_lot:
+                    print(f"     [!] Attention : Ni commande ni lot identifiés après tous les fallbacks.")
+
+                # Consolidation
+                infos_list = [{'po': final_po, 'lot': final_lot, 'fournisseur': final_fournisseur}]
 
                 import time
                 for idx, infos in enumerate(infos_list):
@@ -121,30 +160,6 @@ def lancer_session_scan() -> None:
                     article_clone['po'] = po
                     article_clone['lot'] = lot
                     article_clone['fournisseur'] = fournisseur
-                    
-                    # 4. Validation avec le "Ground Truth" (ERP Layer)
-                    validation_sylob = False
-                    if po and hasattr(loader, 'sylob') and loader.sylob:
-                        try:
-                            result = loader.sylob.chercher_lot_par_po(
-                                po=po, 
-                                art=article.get('ref', ''), 
-                                lot=lot,
-                                ean=code_scanne
-                            )
-                            if result is not None:
-                                validation_sylob = True
-                        except Exception as e:
-                            logging.error(f"[ERREUR] Échec de la validation Sylob: {e}")
-                    
-                    suffix_num = f" (Lot {idx+1}/{len(infos_list)})" if len(infos_list) > 1 else ""
-                    if validation_sylob:
-                        print(f"     [Sylob] Validation confirmée par l'ERP : Commande {po} | Lot {lot}{suffix_num}")
-                    else:
-                        if po or lot:
-                            print(f"     [PDF] Fallback utilisé : Commande {po} | Lot {lot} (Lot non validé par Sylob){suffix_num}")
-                        else:
-                            print(f"     [!] Attention : Ni commande ni lot identifiés{suffix_num}.")
 
                     # 5. Export des données (Excel Layer)
                     print(f"     Génération de la fiche Excel en cours...")

@@ -111,11 +111,11 @@ class PDFExtractor:
                     art_code = m1.group(3)
                 
                 # Format 2: PO# 00017062/MEN#25102 10020313
-                m2 = re.search(r"(?i)PO#\s*(\d+)/MEN#(\d+)\s+(\d{6,})", line)
+                m2 = re.search(r"(?i)PO#\s*(\d+)/MEN#(\d+)\s+(\d+)", line)
                 if m2:
                     po = m2.group(1)
-                    lot = m2.group(2)
-                    art_code = m2.group(3)
+                    art_code = m2.group(2) # MEN# is the article reference!
+                    lot = m2.group(3) # The number after is the lot or supplier code
                     
                 # Format 3: 00161343 25053 21870001 (PO Lot Item)
                 m3 = re.search(r"^(\d{8})\s+(\d{4,6})\s+(\d{6,})", line)

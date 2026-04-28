@@ -60,6 +60,11 @@ logging.basicConfig(
     ]
 )
 
+# Silence verbose Azure SDK loggers
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.identity").setLevel(logging.WARNING)
+
 from src.sylob_api import SylobAPI
 
 class DataLoader:
@@ -95,12 +100,11 @@ class DataLoader:
                 sep=';', 
                 encoding='ISO-8859-1', 
                 dtype=str, 
-                header=None
+                header=0 # Use first row as column names
             )
             
-            # Mapping strict des colonnes du SI
-            cols = ['ref', 'ean', 'designation', 'lot', 'po', 'ean_spcb', 'ean_pcb', 'ho']
-            self.df.columns = cols[:len(self.df.columns)]
+            # Make sure columns are lowercase
+            self.df.columns = [str(c).strip().lower() for c in self.df.columns]
             
             # Nettoyage des espaces superflus (trim) souvent générés par les exports ERP
             for col in self.df.columns:

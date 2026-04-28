@@ -42,7 +42,7 @@ class ExcelHandler:
     def __init__(self, template_path: str = None):
         base_path = get_base_path()
         if template_path is None:
-            self.template_path = os.path.join(base_path, "0_Modele_Et_Donnees", "FOR-ACH-30-2 Fiche d'inspection produit-Controle reception.xlsx")
+            self.template_path = os.path.join(base_path, "0_Modele_Et_Donnees", "FOR-ACH-30-2 Fiche d'inspection produit-Contrôle réception.xlsx")
         else:
             self.template_path = template_path
             
@@ -91,26 +91,46 @@ class ExcelHandler:
             ws = wb.active
             
             # --- Injection des données métier ---
+            from openpyxl.styles import Font
+            red_font = Font(color="FF0000")
+            
+            # Fonction utilitaire pour injecter en rouge
+            def set_red_value(cell_coord, value):
+                ws[cell_coord] = value
+                ws[cell_coord].font = red_font
+                
             # 1. Dates (Format FR standard)
-            ws['B4'] = now.strftime("%d/%m/%Y")
-            ws['F4'] = now.strftime("%d/%m/%Y")
+            set_red_value('B4', now.strftime("%d/%m/%Y"))
+            set_red_value('F4', now.strftime("%d/%m/%Y"))
             
             # 2. Identification Produit
-            ws['B5'] = article_info['ref']
-            ws['B6'] = article_info['designation']
+            set_red_value('B5', article_info['ref'])
+            set_red_value('B6', article_info['designation'])
 
             # 3. Traçabilité
-            ws['G5'] = article_info.get('po', '')
-            ws['G6'] = lot
+            set_red_value('G5', article_info.get('po', ''))
+            set_red_value('G6', lot)
             
             # 4. Nettoyage préventif de la colonne H (Commentaires du template vierge)
             for row in range(5, 51):
                 ws[f'H{row}'] = None
                 
-            # 5. Injection conditionnelle
+            # 5. Injection conditionnelle Fournisseur et EANs supplémentaires
             fournisseur = article_info.get('fournisseur', '')
             if fournisseur:
-                ws['A9'] = f"Fournisseur : {fournisseur}"
+                set_red_value('C9', fournisseur)
+                ws.merge_cells('C9:G9')
+                
+            ean_spcb = str(article_info.get('ean_spcb', '')).replace('nan', '').strip()
+            ean_pcb = str(article_info.get('ean_pcb', '')).replace('nan', '').strip()
+            ho = str(article_info.get('ho', '')).replace('nan', '').strip()
+            
+            if ean_pcb:
+                set_red_value('F12', ean_pcb)
+            if ean_spcb:
+                set_red_value('F14', ean_spcb)
+            if ho:
+                set_red_value('B35', ho)
             
             # Sérialisation
             wb.save(chemin_sortie)
