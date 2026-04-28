@@ -26,3 +26,17 @@ settings_backup.json
 # IDE
 .vscode/
 .idea/
+
+# Build artifacts and binaries
+build/
+dist/
+*.exe
+*.zip
+*.log
+deploy/*.exe
+build.log
+
+# Generated data
+2_Fiches_Creees/
+logs/
+data/
