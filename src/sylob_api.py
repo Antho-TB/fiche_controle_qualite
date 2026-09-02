@@ -1,150 +1,230 @@
 """
-[ARCHITECTURE] Interfaçage ERP (fiche_de_controle)
+[ARCHITECTURE] Interfaçage ERP Sylob (fiche_de_controle)
 
-Rôle global :
-Ce module gère les communications réseau avec l'ERP Sylob (via son API REST/XML).
-Il permet d'interroger la base centrale de l'entreprise pour valider les numéros de Commande (PO)
-et de Lots détectés par l'extracteur PDF.
-
-Stratégie métier (Zero Trust & Secret Management) :
-Pour respecter la doctrine Nubo, aucun secret (user, mot de passe, session) n'est stocké en dur.
-Ils sont récupérés à la volée depuis Azure Key Vault via une Managed Identity ou l'Azure CLI de 
-l'utilisateur. Le certificat SSL interne de Sylob étant potentiellement auto-signé, nous désactivons 
-(temporairement) l'avertissement de sécurité SSL localement, tout en conservant une authentification
-robuste via Basic Auth en Base64.
+Stratégie :
+- Credentials depuis Azure Key Vault (DefaultAzureCredential), fallback .env
+- health-check au démarrage pour le status board
+- Retry automatique sur 401 (session expirée) avec re-fetch des credentials KV
 """
 
 import os
 import sys
 import base64
+import logging
 import requests
 import urllib3
 import xml.etree.ElementTree as ET
-import logging
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+from typing import Optional
 
-# Désactivation des avertissements pour les certificats SSL auto-signés
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+logger = logging.getLogger(__name__)
+
+
+def get_base_path() -> str:
+    """Retourne le chemin d'exécution réel (script ou .exe PyInstaller)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 
 class SylobAPI:
-    """
-    Client de l'API REST de l'ERP Sylob (Endpoint RECEPTIONAPI).
-    """
-    
-    def __init__(self):
-        # --- Standard NUBO : Authentification Azure Key Vault ---
-        vault_url = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
-        try:
-            credential = DefaultAzureCredential()
-            client = SecretClient(vault_url=vault_url, credential=credential)
-            self.user = client.get_secret("SYLOB-USER").value
-            self.password = client.get_secret("SYLOB-PASS").value
-            self.unite_pers = client.get_secret("SYLOB-UNITE-PERS").value
-            self.session_id = client.get_secret("SYLOB-SESSION-ID").value
-            self.base_url1 = client.get_secret("SYLOB-BASE-URL1").value
-        except Exception as e:
-            # Fallback silencieux sur le .env local
-            try:
-                from dotenv import load_dotenv
-                import os, sys
-                if getattr(sys, 'frozen', False):
-                    base_path = os.path.dirname(sys.executable)
-                else:
-                    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-                load_dotenv(os.path.join(base_path, '.env'))
-                
-                self.user = os.getenv("SYLOB_USER", "")
-                self.password = os.getenv("SYLOB_PASS", "")
-                self.unite_pers = os.getenv("SYLOB_UNITE_PERS", "")
-                self.session_id = os.getenv("SYLOB_SESSION_ID", "")
-                self.base_url1 = os.getenv("SYLOB_BASE_URL1", "")
-            except Exception as env_e:
-                logging.error(f"[ERREUR] Échec du fallback .env : {env_e}")
-                self.user = ""
-                self.password = ""
-                self.unite_pers = ""
-                self.session_id = ""
-                self.base_url1 = ""
-        
+    """Client REST de l'ERP Sylob (endpoint RECEPTIONAPI, réponse XML)."""
+
+    _VAULT_URL = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
+    _SECRET_NAMES = ("SYLOB-USER", "SYLOB-PASS", "SYLOB-UNITE-PERS",
+                     "SYLOB-SESSION-ID", "SYLOB-BASE-URL1")
+
+    def __init__(self) -> None:
+        self.user: str = ""
+        self.password: str = ""
+        self.unite_pers: str = ""
+        self.session_id: str = ""
+        self.base_url1: str = ""
+        self.headers: dict = {}
+        self._load_credentials()
+
+    # ------------------------------------------------------------------
+    # Credentials
+    # ------------------------------------------------------------------
+
+    def _load_credentials(self) -> None:
+        """Charge les credentials depuis Key Vault puis fallback .env."""
+        if not self._load_from_keyvault():
+            self._load_from_env()
         self.headers = self._build_headers()
 
+    def _load_from_keyvault(self) -> bool:
+        """
+        Tente de récupérer les secrets depuis Azure Key Vault.
+
+        Returns:
+            True si tous les secrets ont été chargés, False sinon.
+        """
+        try:
+            from azure.identity import DefaultAzureCredential
+            from azure.keyvault.secrets import SecretClient
+            kv = SecretClient(vault_url=self._VAULT_URL, credential=DefaultAzureCredential())
+            self.user = kv.get_secret("SYLOB-USER").value
+            self.password = kv.get_secret("SYLOB-PASS").value
+            self.unite_pers = kv.get_secret("SYLOB-UNITE-PERS").value
+            self.session_id = kv.get_secret("SYLOB-SESSION-ID").value
+            self.base_url1 = kv.get_secret("SYLOB-BASE-URL1").value
+            return True
+        except Exception as e:
+            logger.warning(f"[Sylob] Key Vault indisponible, fallback .env : {e}")
+            return False
+
+    def _load_from_env(self) -> None:
+        """Charge les credentials depuis le fichier .env local."""
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(get_base_path(), '.env'))
+        except Exception:
+            pass
+        self.user = os.getenv("SYLOB_USER", "")
+        self.password = os.getenv("SYLOB_PASS", "")
+        self.unite_pers = os.getenv("SYLOB_UNITE_PERS", "")
+        self.session_id = os.getenv("SYLOB_SESSION_ID", "")
+        self.base_url1 = os.getenv("SYLOB_BASE_URL1", "")
+
     def _build_headers(self) -> dict:
-        """
-        Construit le header d'autorisation Basic Base64 exigé par Sylob.
-        """
+        """Construit le header Basic Auth Base64 requis par Sylob."""
         login = f"{self.user}@@{self.unite_pers}@@{self.session_id}"
-        userpass = f"{login}:{self.password}".encode("utf-8")
-        token = base64.b64encode(userpass).decode("ascii")
+        token = base64.b64encode(f"{login}:{self.password}".encode()).decode("ascii")
         return {"Authorization": f"Basic {token}"}
 
-    def chercher_lot_par_po(self, po: str, art: str = "", lot: str = "", ean: str = "") -> str:
+    def _refresh_credentials(self) -> None:
+        """Re-fetch credentials depuis Key Vault et reconstruit les headers (retry 401)."""
+        logger.warning("[Sylob] Session expirée (401) — refresh credentials...")
+        if self._load_from_keyvault():
+            self.headers = self._build_headers()
+            logger.info("[Sylob] Credentials rafraîchis depuis Key Vault.")
+        else:
+            logger.error("[Sylob] Refresh impossible — Key Vault inaccessible.")
+
+    # ------------------------------------------------------------------
+    # Health-check
+    # ------------------------------------------------------------------
+
+    def is_healthy(self) -> bool:
         """
-        Interroge l'API Sylob pour valider l'existence d'un lot et d'une commande.
-        
-        Stratégie :
-        L'API retourne un XML (et non du JSON). On utilise ElementTree pour extraire
-        précisément le noeud <ligneResultatWS> et valider que l'ERP a bien connaissance
-        de cette livraison imminente. En cas de timeout (latence Sylob), on déclenche un 
-        fallback propre sans faire exploser l'application métier.
-        
-        Args:
-            po (str): Numéro de Purchase Order.
-            art (str): Référence interne.
-            lot (str): Numéro de Batch/Lot fournisseur.
-            ean (str): Code barres EAN.
-            
+        Vérifie que l'API Sylob répond (requête test avec paramètres génériques).
+        Utilisé au démarrage pour afficher le status board.
+
         Returns:
-            str: Le lot validé par l'ERP, ou None si échec.
+            True si Sylob répond avec un XML valide, False sinon.
         """
-        url = self.base_url1
-        if not url:
-            logging.error("[ERREUR] URL Sylob RECEPTIONAPI non configurée.")
-            return None
-        
-        # Replace empty strings with '%' to avoid Sylob 500 errors
-        params = {
-            "limite": "1", 
-            "CMD": po if po else "%", 
-            "ART": art if art else "%", 
-            "LOT": lot if lot else "%", 
-            "EAN": ean if ean else "%"
-        }
-        
+        if not self.base_url1:
+            return False
         try:
-            logging.info(f"[API] Interrogation Sylob (EAN:{ean}, PO:{po}, ART:{art}, LOT:{lot})")
             response = requests.get(
-                url,
+                self.base_url1,
+                params={"limite": "1", "CMD": "%", "ART": "%", "LOT": "%", "EAN": "%"},
+                headers=self.headers,
+                verify=False,
+                timeout=5,
+            )
+            if response.status_code == 401:
+                self._refresh_credentials()
+                response = requests.get(
+                    self.base_url1,
+                    params={"limite": "1", "CMD": "%", "ART": "%", "LOT": "%", "EAN": "%"},
+                    headers=self.headers,
+                    verify=False,
+                    timeout=5,
+                )
+            ET.fromstring(response.text)
+            return True
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------
+    # Recherche lot/PO
+    # ------------------------------------------------------------------
+
+    def chercher_lot_par_po(
+        self,
+        po: str = "",
+        art: str = "",
+        lot: str = "",
+        ean: str = "",
+    ) -> Optional[dict]:
+        """
+        Interroge l'API Sylob pour valider un lot et une commande.
+        Retry automatique sur 401 (session expirée).
+
+        Args:
+            po:  Numéro de Purchase Order.
+            art: Référence interne article.
+            lot: Numéro de Batch/Lot fournisseur.
+            ean: Code EAN.
+
+        Returns:
+            Dict {"po": ..., "lot": ...} ou None si absence de résultat / erreur.
+        """
+        if not self.base_url1:
+            logger.error("[Sylob] URL RECEPTIONAPI non configurée.")
+            return None
+
+        params = {
+            "limite": "1",
+            "CMD": po or "%",
+            "ART": art or "%",
+            "LOT": lot or "%",
+            "EAN": ean or "%",
+        }
+
+        result = self._call_api(params)
+        if result == "401":
+            self._refresh_credentials()
+            result = self._call_api(params)
+            if result == "401":
+                logger.error("[Sylob] 401 persistant après refresh — session inutilisable.")
+                return None
+
+        return result if isinstance(result, dict) else None
+
+    def _call_api(self, params: dict) -> Optional[dict | str]:
+        """
+        Effectue l'appel HTTP vers Sylob et parse le XML.
+
+        Returns:
+            Dict {"po", "lot"}, None si pas de résultat, "401" sur session expirée.
+        """
+        try:
+            logger.info(f"[API] Sylob → {params}")
+            response = requests.get(
+                self.base_url1,
                 params=params,
                 headers=self.headers,
-                verify=False, # Certificat auto-signé interne
-                timeout=5 # Fail-fast pour ne pas bloquer l'opérateur en entrepôt
+                verify=False,
+                timeout=5,
             )
+            if response.status_code == 401:
+                return "401"
             response.raise_for_status()
-            
+
             root = ET.fromstring(response.text)
             ligne = root.find(".//ligneResultatWS")
-            
             if ligne is None:
-                logging.info(f"[INFO] L'ERP Sylob n'a retourné aucune Commande (PO) ni Lot ouvert pour cet article.")
+                logger.info("[Sylob] Aucune commande/lot ouvert trouvé.")
                 return None
-                
+
             valeurs = ligne.findall("valeur")
-            result_dict = {}
-            if len(valeurs) > 0:
-                result_dict['po'] = (valeurs[0].text or "").strip()
+            result: dict = {}
+            if valeurs:
+                result['po'] = (valeurs[0].text or "").strip()
             if len(valeurs) > 5:
-                # L'index 5 correspond à la colonne "Numéro" (le Lot)
-                result_dict['lot'] = (valeurs[5].text or "").strip()
-            
-            if 'po' in result_dict or 'lot' in result_dict:
-                return result_dict
-                
+                result['lot'] = (valeurs[5].text or "").strip()
+
+            return result if result else None
+
+        except requests.exceptions.Timeout:
+            logger.warning("[Sylob] Timeout — fallback données PDF/CSV.")
             return None
-            
         except requests.exceptions.RequestException as e:
-            logging.warning(f"[ALERTE] Timeout ou erreur réseau Sylob, fallback sur les données PDF : {e}")
+            logger.warning(f"[Sylob] Erreur réseau : {e}")
             return None
         except ET.ParseError as e:
-            logging.warning(f"[ALERTE] Le format XML de retour Sylob est invalide, fallback PDF : {e}")
+            logger.warning(f"[Sylob] XML invalide : {e}")
             return None
