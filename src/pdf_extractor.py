@@ -1,191 +1,466 @@
 """
 [ARCHITECTURE] I/O OCR & Text Parsing (fiche_de_controle)
 
-Rôle global :
-Ce module scanne de manière autonome les dossiers contenant des "Packing Lists" (Bons de livraison
-fournisseurs en PDF), en extrait le texte via PyPDF, et détecte les numéros de Commande (PO) 
-et de Lot (Batch) par le biais d'expressions régulières (Regex).
-
-Stratégie métier (Fuzzy Regex Matching) :
-Les fournisseurs mondiaux (Asiatiques, Européens) ont des formats de Packing Lists extrêmement hétérogènes.
-Une approche stricte échouerait dans 80% des cas. La stratégie ici est d'utiliser une série de
-patterns (formats 1 à 4) pour ratisser large. On croise ensuite ces résultats avec l'API Sylob 
-en aval. Ce module sert donc d'extracteur "Best-Effort" pour pré-remplir l'interface opérateur.
+Formats PDF fournisseurs identifies sur les archives :
+  A - Template TB multicontainer (BILL TO, PO # : X, N deg Lot: X)
+  B - PO#XXXXXXXX/MEN#XXXXX XXXXXXXX (Guangwei, JIT Global)
+  C - PO NO.: / N deg. LOT: (Yangjiang Yinhong)
+  D - Jieyang Wanxin : PO(8)+Lot(5)+Item(8) sans espaces, tableau chinois
+  E - JAZZWAY : CUSTOMER P.O. NO. + code 8 chiffres
+  F - PDFs scannes (images pures) -> ADI obligatoire
+- adi_available (bool public) expose l etat du moteur pour le status board
 """
 
 import os
 import re
 import sys
 import logging
-from pypdf import PdfReader
+import shutil
+import time
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
 
 def get_base_path() -> str:
-    """
-    Retourne le chemin d'exécution réel (script Python ou .exe compilé).
-    Crucial pour s'assurer que l'application trouve toujours ses dossiers cibles
-    même déployée via PyInstaller sur les Windows des entrepôts.
-    """
-    if getattr(sys, 'frozen', False):
+    """Retourne le chemin d execution reel (script Python ou .exe compile PyInstaller)."""
+    if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _load_adi_credentials() -> tuple[Optional[str], Optional[str]]:
+    """
+    Charge endpoint et cle ADI depuis Key Vault (DefaultAzureCredential),
+    puis fallback .env local.
+
+    Returns:
+        Tuple (endpoint, key) ou (None, None) si indisponible.
+    """
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.keyvault.secrets import SecretClient
+        vault_url = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
+        kv = SecretClient(vault_url=vault_url, credential=DefaultAzureCredential())
+        return kv.get_secret("DOCINT-ENDPOINT").value, kv.get_secret("DOCINT-KEY").value
+    except Exception:
+        pass
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(get_base_path(), ".env"))
+        endpoint = os.getenv("DOCINT_ENDPOINT", "")
+        key = os.getenv("DOCINT_KEY", "")
+        if endpoint and key:
+            return endpoint, key
+    except Exception:
+        pass
+    return None, None
 
 
 class PDFExtractor:
-    """
-    Moteur de parsing des Packing Lists au format PDF.
-    """
-    
-    def __init__(self, pdf_dir: str = None):
-        if pdf_dir is None:
-            self.pdf_dir = os.path.join(get_base_path(), "1_Packing_Lists_A_Traiter")
-        else:
-            self.pdf_dir = pdf_dir
-        self.articles_pdf = {} 
+    """Moteur de parsing des Packing Lists (ADI primaire + fallback PyPDF)."""
+
+    _PO_KEYS = frozenset({
+        "po", "p.o.", "p.o", "purchase order", "order no", "order number",
+        "cmd", "commande", "customer po", "customer p.o.", "no commande",
+    })
+    _LOT_KEYS = frozenset({
+        "lot", "batch", "lot no", "batch no", "n° lot", "no lot",
+        "lot number", "batch number", "n°lot",
+    })
+    # Separateur multi-valeurs dans les templates TB (ideogramme japonais virgule)
+    _MULTI_SEP = re.compile(r"[、,]")
+
+    def __init__(self, pdf_dir: Optional[str] = None) -> None:
+        self.pdf_dir: str = pdf_dir or os.path.join(get_base_path(), "1_Packing_Lists_A_Traiter")
+        self.articles_pdf: dict[str, list[dict]] = {}
+        self.rapports: list[dict] = []
+        self.adi_available: bool = False
+        self._adi_client = None
+        self._init_adi_client()
         self._load_all_pdfs()
 
+    # ------------------------------------------------------------------
+    # Initialisation ADI
+    # ------------------------------------------------------------------
+
+    def _init_adi_client(self) -> None:
+        """Charge le client ADI. Positionne adi_available."""
+        try:
+            from azure.ai.documentintelligence import DocumentIntelligenceClient
+            from azure.core.credentials import AzureKeyCredential
+            endpoint, key = _load_adi_credentials()
+            if not endpoint or not key:
+                logger.warning("[ADI] Credentials introuvables - fallback PyPDF.")
+                return
+            self._adi_client = DocumentIntelligenceClient(
+                endpoint=endpoint, credential=AzureKeyCredential(key)
+            )
+            self.adi_available = True
+            logger.info("[ADI] Client Document Intelligence initialise.")
+        except ImportError:
+            logger.warning("[ADI] Package azure-ai-documentintelligence absent - fallback PyPDF.")
+        except Exception as e:
+            logger.warning("[ADI] Init echouee (%s) - fallback PyPDF.", e)
+
+    # ------------------------------------------------------------------
+    # Chargement dossier
+    # ------------------------------------------------------------------
+
     def _load_all_pdfs(self) -> None:
-        """
-        Scan initial du dossier de dépôt.
-        
-        Stratégie :
-        Au lancement de l'application, l'extracteur pré-digère tous les PDF présents 
-        dans le "hot folder" et indexe les PO/Lots en RAM. Cela permet de répondre
-        instantanément (0 latence) quand l'opérateur scanne un code-barres.
-        """
+        """Scan initial du hot folder et indexation en RAM."""
         if not os.path.exists(self.pdf_dir):
             os.makedirs(self.pdf_dir)
-            logging.info(f"[INFO] Dossier de dépôt PDF créé : {self.pdf_dir}")
+            logger.info("[INFO] Dossier cree : %s", self.pdf_dir)
             return
-
-        pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith('.pdf')]
-        
+        pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith(".pdf")]
         if not pdf_files:
-            logging.info(f"[INFO] Aucun PDF trouvé dans la file d'attente ({self.pdf_dir})")
+            logger.info("[INFO] Aucun PDF dans %s", self.pdf_dir)
             return
-            
-        logging.info(f"[INFO] Ingestion automatique de {len(pdf_files)} Packing List(s)...")
-        
+        logger.info("[INFO] Ingestion de %d Packing List(s)...", len(pdf_files))
         for file_name in pdf_files:
-            pdf_path = os.path.join(self.pdf_dir, file_name)
-            self._extract_from_pdf(pdf_path)
+            self._extract_from_pdf(os.path.join(self.pdf_dir, file_name))
+
+    # ------------------------------------------------------------------
+    # Orchestration ADI -> PyPDF
+    # ------------------------------------------------------------------
 
     def _extract_from_pdf(self, pdf_path: str) -> None:
         """
-        Analyse itérative d'un fichier PDF avec expressions régulières (Regex).
+        Orchestre l extraction d une Packing List et RAPPORTE son resultat.
+
+        Junior Tip : l implementation historique loguait "[SUCCES] Indexation
+        terminee" meme quand zero article etait extrait. Une panne totale
+        ressemblait donc a un succes dans les logs, et personne ne pouvait la
+        voir avant que le service qualite se plaigne. Ici, zero article extrait
+        est un ECHEC nomme, trace dans self.rapports et affichable a l ecran.
         """
+        nom = os.path.basename(pdf_path)
         try:
-            reader = PdfReader(pdf_path)
-            text = ""
-            for page in reader.pages:
-                text += page.extract_text() + "\n"
-
-            lines = [l.strip() for l in text.split("\n") if l.strip()]
-            fournisseur = ""
-            if lines and "BILL TO" not in lines[0].upper() and "PACKING LIST" not in lines[0].upper():
-                fournisseur = lines[0].strip()
-
-            # Global PO and Lot (if present in header)
-            global_po = ""
-            global_lot = ""
-            
-            # Pattern : PO # : 123456
-            po_header_match = re.search(r"(?i)PO\s*#\s*[:]\s*([\d]+)", text)
-            if po_header_match:
-                global_po = po_header_match.group(1)
-            elif re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text):
-                global_po = re.search(r"(?i)CUSTOMER\s*P\.?O\.?\s*NO\.?\s*([\d]+)", text).group(1)
-
-            # Pattern : N° Lot : 123456
-            lot_header_match = re.search(r"(?i)N[o°]\s*Lot\s*[:]\s*([\d]+)", text)
-            if lot_header_match:
-                global_lot = lot_header_match.group(1)
-
-            # Ligne par ligne pour associer chaque article à son PO/Lot
-            for line in lines:
-                po, lot, art_code = global_po, global_lot, ""
-                
-                # Format 1: PO:00169477821520000032000006
-                m1 = re.search(r"(?i)po:\s*(\d{8})(\d{10})?(\d{6,})", line)
-                if m1:
-                    po = m1.group(1)
-                    art_code = m1.group(3)
-                
-                # Format 2: PO# 00017062/MEN#25102 10020313
-                m2 = re.search(r"(?i)PO#\s*(\d+)/MEN#(\d+)\s+(\d+)", line)
-                if m2:
-                    po = m2.group(1)
-                    art_code = m2.group(2) # MEN# is the article reference!
-                    lot = m2.group(3) # The number after is the lot or supplier code
-                    
-                # Format 3: 00161343 25053 21870001 (PO Lot Item)
-                m3 = re.search(r"^(\d{8})\s+(\d{4,6})\s+(\d{6,})", line)
-                if m3:
-                    po = m3.group(1)
-                    lot = m3.group(2)
-                    art_code = m3.group(3)
-                    
-                # Format 4: 40110011 MANDOLINE SLICER... where 40110011 is item code
-                m4 = re.search(r"^(\d{6,})\s+[A-Za-z]+", line)
-                if m4 and not art_code:
-                    art_code = m4.group(1)
-
-                if art_code:
-                    if art_code not in self.articles_pdf:
-                        self.articles_pdf[art_code] = []
-                    info = {"po": po, "lot": lot, "fournisseur": fournisseur}
+            if self.adi_available and self._adi_client:
+                results = self._extract_with_adi(pdf_path)
+                source = "ADI"
+            else:
+                results = self._extract_with_pypdf_fallback(pdf_path)
+                source = "PyPDF"
+            for art_code, infos in results.items():
+                if art_code not in self.articles_pdf:
+                    self.articles_pdf[art_code] = []
+                for info in infos:
                     if info not in self.articles_pdf[art_code]:
                         self.articles_pdf[art_code].append(info)
-                        
-            logging.info(f"[SUCCÈS] Indexation PDF terminée pour {os.path.basename(pdf_path)}")
-            
+            self._rapporter(nom, source, results)
         except Exception as e:
-            logging.error(f"[ERREUR] Échec de l'OCR/Parsing du PDF {pdf_path}: {e}")
+            logger.error("[ECHEC] Extraction PDF %s : %s", nom, e)
+            self.rapports.append({"fichier": nom, "moteur": "-", "statut": "ERREUR",
+                                  "n_articles": 0, "detail": str(e)})
 
-    def chercher_infos_pdf(self, code_article: str, ref_article: str = "") -> list:
+    def _rapporter(self, nom: str, source: str, results: dict) -> None:
+        """Consigne le resultat d extraction d une Packing List."""
+        n = len(results)
+        ambigus = sum(1 for infos in results.values()
+                      for i in infos if i.get("po_ambigu"))
+        if n == 0:
+            logger.error("[ECHEC] %s : aucun article extrait (moteur %s). "
+                         "Packing List non exploitable.", nom, source)
+            statut, detail = "ECHEC", "Aucun article extrait"
+        elif ambigus:
+            logger.warning("[ATTENTION] %s : %d article(s) extrait(s), PO "
+                           "ambigu (plusieurs commandes dans l en-tete).", nom, n)
+            statut, detail = "PARTIEL", "PO ambigu, a confirmer"
+        else:
+            logger.info("[SUCCES] %s : %d article(s) extrait(s) via %s.",
+                        nom, n, source)
+            statut, detail = "OK", ""
+        self.rapports.append({"fichier": nom, "moteur": source, "statut": statut,
+                              "n_articles": n, "detail": detail})
+
+    def resume_ingestion(self) -> dict[str, int]:
+        """Compte les Packing Lists par statut, pour le status board."""
+        resume = {"OK": 0, "PARTIEL": 0, "ECHEC": 0, "ERREUR": 0}
+        for r in self.rapports:
+            resume[r["statut"]] = resume.get(r["statut"], 0) + 1
+        return resume
+
+    # ------------------------------------------------------------------
+    # Moteur ADI
+    # ------------------------------------------------------------------
+
+    def _extract_with_adi(self, pdf_path: str) -> dict[str, list[dict]]:
+        """Analyse via ADI prebuilt-layout. Extrait PO/Lot + codes articles."""
+        with open(pdf_path, "rb") as f:
+            poller = self._adi_client.begin_analyze_document(
+                "prebuilt-layout",
+                analyze_request=f,
+                content_type="application/octet-stream",
+            )
+        doc = poller.result()
+        global_po, global_lot, fournisseur = self._parse_adi_kv_pairs(doc)
+        art_codes = self._parse_adi_tables(doc)
+        info = {"po": global_po, "lot": global_lot, "fournisseur": fournisseur}
+        return {code: [info] for code in art_codes} if art_codes else {}
+
+    def _parse_adi_kv_pairs(self, doc: object) -> tuple[str, str, str]:
         """
-        Recherche en mémoire les données extraites liées à un article spécifique.
-        
-        Stratégie :
-        Identique à la stratégie DataLoader : exact match, puis fuzzy match.
+        Extrait PO, Lot, fournisseur depuis les key_value_pairs ADI.
+        Gere les valeurs multiples (separateur) - retourne le premier.
+        """
+        po, lot, fournisseur = "", "", ""
+        for kv in getattr(doc, "key_value_pairs", []) or []:
+            if not kv.key or not kv.value:
+                continue
+            k = (kv.key.content or "").strip().lower()
+            v = (kv.value.content or "").strip()
+            if not po and k in self._PO_KEYS:
+                m = re.search(r"\d{6,}", v)
+                if m:
+                    po = m.group(0)
+            if not lot and k in self._LOT_KEYS:
+                m = re.search(r"\d{4,}", v)
+                if m:
+                    lot = m.group(0)
+        for para in (getattr(doc, "paragraphs", []) or [])[:5]:
+            content = (para.content or "").strip()
+            if content and len(content) > 3 and "PACKING" not in content.upper():
+                fournisseur = content
+                break
+        return po, lot, fournisseur
+
+    def _parse_adi_tables(self, doc: object) -> list[str]:
+        """Extrait codes articles (6-10 chiffres) depuis les tables ADI."""
+        art_pattern = re.compile(r"^\d{6,10}$")
+        codes: list[str] = []
+        for table in getattr(doc, "tables", []) or []:
+            for cell in table.cells:
+                content = (cell.content or "").strip()
+                if art_pattern.match(content) and content not in codes:
+                    codes.append(content)
+        return codes
+
+    # ------------------------------------------------------------------
+    # Fallback PyPDF
+    # ------------------------------------------------------------------
+
+    def _extract_with_pypdf_fallback(self, pdf_path: str) -> dict[str, list[dict]]:
+        """
+        Extraction PyPDF + regex sur les formats A, B, C, D, E.
+        Gere les PO/Lots multiples du Format A (template TB).
+        """
+        from pypdf import PdfReader
+        results: dict[str, list[dict]] = {}
+        reader = PdfReader(pdf_path)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        if not text.strip():
+            logger.error("[ECHEC] %s : PDF image pure (0 caractere de texte). "
+                         "Un moteur OCR est indispensable pour ce fournisseur.",
+                         os.path.basename(pdf_path))
+            return results
+
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        fournisseur = self._extract_fournisseur(lines)
+        global_po = self._regex_global_po(text)
+        global_lot = self._regex_global_lot(text)
+        is_format_e = self._detect_format_e(text)
+
+        po_list = self._split_multi_value(global_po, text, r"(?i)PO\s*#\s*:\s*([\d\s\u3001,]+)")
+        lot_list = self._split_multi_value(global_lot, text, r"(?i)N\u00b0[\s.]*\s*Lot[\u003a\uff1a\s]\s*([\d\s\u3001,]+)")
+
+        for line in lines:
+            art_code, po, lot = self._parse_line_regex(line, global_po, global_lot, is_format_e)
+            if not art_code:
+                continue
+            if len(po_list) > 1:
+                # L en-tete porte plusieurs commandes et la ligne article ne dit
+                # pas laquelle la concerne. L implementation historique faisait
+                # un produit cartesien PO x Lot applique a TOUS les articles :
+                # la fiche pouvait porter un PO faux sans que personne le voie.
+                # On refuse de deviner et on remonte les candidats.
+                info = {"po": "", "lot": "", "fournisseur": fournisseur,
+                        "po_ambigu": True, "po_candidats": po_list,
+                        "lot_candidats": lot_list}
+                results.setdefault(art_code, [])
+                if info not in results[art_code]:
+                    results[art_code].append(info)
+            else:
+                info = {"po": po, "lot": lot, "fournisseur": fournisseur}
+                results.setdefault(art_code, [])
+                if info not in results[art_code]:
+                    results[art_code].append(info)
+        return results
+
+    def _extract_fournisseur(self, lines: list[str]) -> str:
+        """Extrait le nom du fournisseur depuis les premieres lignes."""
+        skip = ("BILL TO", "PACKING LIST", "INVOICE", "TO:", "FROM:",
+                "DELIVERY ADRESS", "DELIVERY ADDRESS", "TVA NUMBER", "EORI",
+                "TARRERIAS", "TB-GROUPE", "INCOTERM", "HS CODE", "DATE",
+                "PORT OF", "MONETARY", "CONSIGNEE", "SHIP VIA")
+        for line in lines[:8]:
+            majuscule = line.upper()
+            if any(kw in majuscule for kw in skip):
+                continue
+            if len(line) > 3 and not re.match(r"^[\d\s.:/-]+$", line):
+                return line[:120]
+        logger.warning("[ATTENTION] Fournisseur non identifie dans l en-tete.")
+        return ""
+
+    def _split_multi_value(self, default: str, text: str, pattern: str) -> list[str]:
+        """
+        Extrait et decoupe les valeurs multiples (separateur ideogramme ou virgule).
+        Retourne [default] si valeur unique ou pattern non trouve.
+        """
+        m = re.search(pattern, text)
+        if not m:
+            return [default] if default else []
+        raw = m.group(1)
+        parts = [p.strip() for p in self._MULTI_SEP.split(raw) if re.search(r"\d{6,}", p.strip())]
+        return parts if len(parts) > 1 else [default] if default else []
+
+    def _regex_global_po(self, text: str) -> str:
+        """
+        Extrait le premier PO depuis l en-tete.
+        Formats : PO # :, PO NO.:, PO#/MEN#, CUSTOMER P.O. NO. (valeur sur ligne suivante).
+        """
+        patterns = [
+            r"(?i)PO\s*#\s*:\s*([\d]+)",
+            r"(?i)PO\s+NO\.\s*:\s*([\d]+)",
+            r"(?i)CUSTOMER\s+P\.O\.\s+NO\.?\s+([\d]+)",
+            r"(?i)PO#\s*([\d]+)/MEN#",
+        ]
+        for pat in patterns:
+            m = re.search(pat, text)
+            if m:
+                return m.group(1).strip()
+        # JAZZWAY : "CUSTOMER P.O. NO." est un header de colonne,
+        # le numero PO apparait sur la ligne suivante (8 chiffres seuls)
+        if re.search(r"(?i)CUSTOMER\s+P\.O\.\s+NO\.", text):
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
+                if re.search(r"(?i)CUSTOMER\s+P\.O\.\s+NO\.", line):
+                    for j in range(i + 1, min(i + 5, len(lines))):
+                        m = re.match(r"^(\d{8})\b", lines[j].strip())
+                        if m:
+                            return m.group(1)
+        return ""
+
+    def _regex_global_lot(self, text: str) -> str:
+        """
+        Extrait le premier Lot depuis l en-tete.
+        Formats : N deg Lot:, N deg. LOT:, N deg LOT:, LOT:
+        """
+        patterns = [
+            r"(?i)N\u00b0[\s.]*\s*Lot[\u003a\uff1a\s]\s*([\d]+)",
+            r"(?i)LOT\s*:\s*([\d]+)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, text)
+            if m:
+                return m.group(1).strip()
+        return ""
+
+    def _detect_format_e(self, text: str) -> bool:
+        """True si document Format E (JAZZWAY - CUSTOMER P.O. NO.)."""
+        return bool(re.search(r"(?i)CUSTOMER\s+P\.O\.\s+NO\.", text))
+
+    def _parse_line_regex(
+        self, line: str, global_po: str, global_lot: str, is_format_e: bool = False
+    ) -> tuple[str, str, str]:
+        """
+        Applique les formats regex sur une ligne de texte PDF.
+
+        Formats:
+          1 - PO:XXXXXXXXXXX (code embaque dans PO)
+          B - PO# XXXXXXXX/MEN#XXXXX XXXXXXXX (Guangwei/JIT - article apres MEN#)
+          3 - XXXXXXXX XXXXX XXXXXXXX (PO + Lot + Item avec espaces)
+          D - PO(8)+Lot(4-6)+Item(7-8) sans espaces (Jieyang Wanxin)
+          E - XXXXXXXX DESCRIPTION (JAZZWAY, seulement si is_format_e=True)
+
+        Returns:
+            Tuple (art_code, po, lot). art_code vide si aucun match.
+        """
+        # Format 1
+        m = re.search(r"(?i)po:\s*(\d{8})(\d{10})?(\d{6,})", line)
+        if m:
+            return m.group(3), m.group(1), global_lot
+
+        # Format B avec ITEM# explicite
+        m = re.search(r"(?i)PO#\s*(\d+)/MEN#\d+\s+ITEM#\s*(\d{6,})", line)
+        if m:
+            return m.group(2), m.group(1), global_lot
+
+        # Format B legacy (article directement apres MEN#XXXXX)
+        m = re.search(r"(?i)PO#\s*(\d+)/MEN#\d+\s+(\d{6,})", line)
+        if m:
+            return m.group(2), m.group(1), global_lot
+
+        # Format 3 (PO Lot Item avec espaces) - lot fixe 5 chiffres
+        # \d{4,6} greedy causait sur-capture (6 chiffres) sur PDFs Jieyang Wanxin avec espaces PyPDF
+        m = re.match(r"^(\d{8})\s+(\d{5})\s+(\d{6,})", line)
+        if m:
+            return m.group(3), m.group(1), m.group(2)
+
+        # Format D (Jieyang Wanxin - sans espaces : PO8+Lot5+Item8+[qty digit(s)]+texte chinois)
+        # Validation : du chinois doit apparaitre quelque part apres le match (pas forcément position 0)
+        m = re.match(r"^(\d{8})(\d{5})(\d{7,8})", line)
+        if m:
+            rest = line[len(m.group(0)):]
+            if rest and re.search(r"[一-鿿]", rest):
+                return m.group(3), m.group(1), m.group(2)
+
+        # Format E : 8 chiffres + espace + lettre (active si PO connu dans le doc)
+        # Couvre : JAZZWAY, JIT Global (10610003 FUSIL...), etc.
+        if global_po:
+            m = re.match(r"^(\d{8})(?!\d)\s+[A-Za-z]", line)
+            if m:
+                return m.group(1), global_po, global_lot
+
+        # Format H (JIT Global) : 8 chiffres + espace + 1-3 chiffres + lettre collees
+        # Ex: "10320051 88SET OF 8 BLACK" - quantite collee a la description
+        if global_po:
+            m = re.match(r"^(\d{6,8})(?!\d)\s+\d{1,3}[A-Z]", line)
+            if m:
+                return m.group(1), global_po, global_lot
+
+        # Format G : code article seul sur sa ligne (ex: "10590014")
+        if global_po:
+            m = re.match(r"^(\d{6,8})$", line)
+            if m:
+                return m.group(1), global_po, global_lot
+
+        return "", global_po, global_lot
+
+    # ------------------------------------------------------------------
+    # Interface publique
+    # ------------------------------------------------------------------
+
+    def chercher_infos_pdf(self, code_article: str, ref_article: str = "") -> list[dict]:
+        """
+        Recherche en memoire les donnees extraites pour un article.
+        Exact match sur code ou ref, puis fuzzy (sous-chaine >= 6 chars).
         """
         if code_article in self.articles_pdf:
             return self.articles_pdf[code_article]
-            
         if ref_article and ref_article in self.articles_pdf:
             return self.articles_pdf[ref_article]
-            
         for k, v in self.articles_pdf.items():
             if len(k) >= 6 and (k in code_article or k in ref_article):
-               return v
-               
+                return v
         return []
 
     def archiver_pdfs(self) -> None:
-        """
-        Politique de rétention (Log rotation).
-        Déplace les PDF consommés vers les archives pour éviter de polluer 
-        la prochaine itération et provoquer des faux positifs (mauvais PO lié à la session de la veille).
-        """
-        import time
-        import shutil
-        
+        """Deplace les PDF consommes vers archives/ (log rotation)."""
         archive_dir = os.path.join(self.pdf_dir, "archives")
-        if not os.path.exists(archive_dir):
-            os.makedirs(archive_dir)
-            
-        pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith('.pdf')]
+        os.makedirs(archive_dir, exist_ok=True)
+        pdf_files = [f for f in os.listdir(self.pdf_dir) if f.lower().endswith(".pdf")]
         if not pdf_files:
             return
-            
-        logging.info(f"[INFO] Déplacement de {len(pdf_files)} PDF vers les archives...")
+        logger.info("[INFO] Archivage de %d PDF...", len(pdf_files))
         for file_name in pdf_files:
             src = os.path.join(self.pdf_dir, file_name)
             dst = os.path.join(archive_dir, file_name)
+            if os.path.exists(dst):
+                base, ext = os.path.splitext(file_name)
+                dst = os.path.join(archive_dir, "%s_%d%s" % (base, int(time.time()), ext))
             try:
-                # Anti-collision
-                if os.path.exists(dst):
-                    base, ext = os.path.splitext(file_name)
-                    dst = os.path.join(archive_dir, f"{base}_{int(time.time())}{ext}")
                 shutil.move(src, dst)
             except Exception as e:
-                logging.error(f"[ERREUR] Impossible d'archiver {file_name}: {e}")
+                logger.error("[ERREUR] Archivage %s : %s", file_name, e)

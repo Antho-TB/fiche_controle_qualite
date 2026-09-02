@@ -1,168 +1,173 @@
 """
 [ARCHITECTURE] I/O & Référentiel Article (fiche_de_controle)
 
-Rôle global :
-Ce module agit comme le référentiel maître des données articles au sein de l'application.
-Il gère l'alimentation hybride des données de contrôle (soit via un dump CSV de secours, 
-soit via l'API Sylob). C'est la brique d'accès aux données (Data Layer).
-
-Stratégie métier (Résilience & Fallback) :
-La logique est construite sur une architecture résiliente : on charge un fichier CSV
-local en mémoire au démarrage. Si l'ERP Sylob est indisponible (latence réseau, VPN coupé),
-l'application peut continuer à flasher des codes-barres sans interruption de la chaîne
-logistique. De plus, il intègre une recherche "fuzzy" (coeur du code EAN) pour 
-pallier les limitations physiques de certaines douchettes (qui tronquent les préfixes/suffixes).
+Stratégie :
+- CSV local = source d'existence des articles (lookup)
+- Sylob = source d'enrichissement PO/Lot (via enrichir_depuis_sylob)
+- Les deux responsabilités sont séparées pour éviter que l'une bloque l'autre
 """
 
-import pandas as pd
-import logging
 import os
 import sys
+import logging
+from typing import Optional
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
 
 def get_base_path() -> str:
-    """
-    Retourne le chemin d'exécution réel (script Python ou .exe compilé).
-    
-    Stratégie :
-    L'application pouvant être packagée via PyInstaller pour les postes opérateurs,
-    `__file__` ne pointera plus vers le bon dossier de ressources. `sys.frozen` 
-    permet d'ancrer le script au bon endroit dans tous les scénarios.
-    """
+    """Retourne le chemin d'exécution réel (script ou .exe PyInstaller)."""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
-# --- Configuration du logging (Bonne pratique MLOps : tracer les actions) ---
-try:
-    log_dir = os.path.join(get_base_path(), "logs")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    log_file_path = os.path.join(log_dir, "data_processing.log")
-    
-    # Test d'écriture pour s'assurer des droits (environnement Windows restreint)
-    with open(log_file_path, 'a', encoding='utf-8') as f:
-        pass
-        
-except (PermissionError, OSError):
-    import tempfile
-    log_dir = os.path.join(tempfile.gettempdir(), "Scanner_Qualite_Logs")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    log_file_path = os.path.join(log_dir, "data_processing.log")
+def _setup_logging() -> None:
+    """Configure le logging fichier + console."""
+    try:
+        log_dir = os.path.join(get_base_path(), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "data_processing.log")
+        with open(log_file, 'a', encoding='utf-8'):
+            pass
+    except (PermissionError, OSError):
+        import tempfile
+        log_dir = os.path.join(tempfile.gettempdir(), "Scanner_Qualite_Logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "data_processing.log")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file_path, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(),
+        ],
+    )
+    for noisy in ("azure", "azure.core.pipeline.policies.http_logging_policy", "azure.identity"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
-# Silence verbose Azure SDK loggers
-logging.getLogger("azure").setLevel(logging.WARNING)
-logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
-logging.getLogger("azure.identity").setLevel(logging.WARNING)
 
-from src.sylob_api import SylobAPI
+_setup_logging()
+
+from src.sylob_api import SylobAPI  # noqa: E402 (après setup logging)
+from src.code_resolver import ResolutionCode, resoudre  # noqa: E402
+
 
 class DataLoader:
-    """
-    Classe responsable du chargement en RAM et de la recherche croisée des articles.
-    """
-    
-    def __init__(self, csv_path: str = None):
+    """Référentiel maître des articles — lookup CSV + enrichissement Sylob."""
+
+    def __init__(self, csv_path: Optional[str] = None) -> None:
         if csv_path is None:
             csv_path = os.path.join(get_base_path(), "0_Modele_Et_Donnees", "article.csv")
-        self.csv_path = csv_path
-        self.df = None
-        self.sylob = SylobAPI() # Nouvelle source API
+        self.csv_path: str = csv_path
+        self.df: Optional[pd.DataFrame] = None
+        self.sylob: SylobAPI = SylobAPI()
         self._load_data()
 
-    def _load_data(self) -> None:
-        """
-        Charge le fichier CSV de référence avec Pandas.
-        
-        Stratégie :
-        - sep=';' : standard d'export Excel FR.
-        - encoding='ISO-8859-1' : pour gérer l'historique de l'ERP et les accents.
-        - dtype=str : OBLIGATOIRE. Les codes-barres (EAN) commençant par 0 seraient tronqués
-          par Pandas si traités en tant qu'entiers.
-        """
-        if not os.path.exists(self.csv_path):
-            logging.warning(f"[INFO] Fichier CSV de fallback introuvable : {self.csv_path}. Utilisation exclusive de l'API Sylob.")
-            return
+    # ------------------------------------------------------------------
+    # Chargement CSV
+    # ------------------------------------------------------------------
 
+    def _load_data(self) -> None:
+        """Charge le CSV de référence article en mémoire."""
+        if not os.path.exists(self.csv_path):
+            logger.warning(f"[CSV] Fichier introuvable : {self.csv_path}. Sylob seul actif.")
+            return
         try:
             self.df = pd.read_csv(
-                self.csv_path, 
-                sep=';', 
-                encoding='ISO-8859-1', 
-                dtype=str, 
-                header=0 # Use first row as column names
+                self.csv_path,
+                sep=';',
+                encoding='ISO-8859-1',
+                dtype=str,
+                header=0,
             )
-            
-            # Make sure columns are lowercase
             self.df.columns = [str(c).strip().lower() for c in self.df.columns]
-            
-            # Nettoyage des espaces superflus (trim) souvent générés par les exports ERP
             for col in self.df.columns:
                 self.df[col] = self.df[col].astype(str).str.strip()
-                
-            logging.info(f"[SUCCÈS] Base article chargée en mémoire ({len(self.df)} articles).")
-            
+            logger.info(f"[CSV] {len(self.df)} articles chargés.")
         except Exception as e:
-            logging.error(f"[ERREUR] Échec de la lecture du CSV de secours : {e}")
+            logger.error(f"[CSV] Erreur lecture : {e}")
 
-    def chercher_article(self, code: str) -> dict:
+    def get_article_count(self) -> int:
+        """Retourne le nombre d'articles chargés (0 si CSV absent)."""
+        return len(self.df) if self.df is not None else 0
+
+    # ------------------------------------------------------------------
+    # Lookup article
+    # ------------------------------------------------------------------
+
+    def resoudre_code(self, code: str) -> ResolutionCode:
         """
-        Recherche un article dans la base de données locale (CSV).
-        
-        Stratégie :
-        La recherche locale s'effectue en cascade :
-        1. Correspondance exacte sur l'EAN (Code-barres)
-        2. Correspondance exacte sur la Référence interne
-        3. Recherche "fuzzy" : extraction du coeur du code EAN (caractères centraux)
-           pour rattraper les lectures incomplètes du scanner.
-           
+        Resout un code scanne en article, avec tracabilite du type de code.
+
+        Interroge ean, ean_pcb, ean_spcb et ref, puis convertit un EAN14 en
+        EAN13 si besoin. Le match approximatif historique reste disponible mais
+        est marque non fiable : l interface doit demander confirmation.
+
         Args:
-            code (str): Le code flashé par l'opérateur.
-            
+            code: Code brut sorti de la douchette.
+
         Returns:
-            dict: Les métadonnées de l'article, ou None si introuvable.
+            ResolutionCode portant l article, le type de code et la fiabilite.
+
+        Junior Tip : avant ce correctif, un code carton EAN14 tombait dans le
+        match approximatif et remontait un article VOISIN dans 91 pour cent des
+        cas, sans aucune alerte. La fiche de controle portait alors le mauvais
+        article.
         """
-        if self.df is None:
+        return resoudre(code, self.df)
+
+    def chercher_article(self, code: str) -> Optional[dict]:
+        """
+        Recherche un article dans le referentiel local.
+
+        Returns:
+            Dict article enrichi des cles _resolution et _fiable, ou None.
+        """
+        resolution = self.resoudre_code(code)
+        if not resolution.article:
+            return None
+        article = dict(resolution.article)
+        article["_resolution"] = resolution.type_code
+        article["_fiable"] = resolution.fiable
+        article["_message_resolution"] = resolution.message
+        article["po"] = article.get("po", "") or ""
+        article["lot"] = article.get("lot", "") or ""
+        if article["po"] == "nan":
+            article["po"] = ""
+        if article["lot"] == "nan":
+            article["lot"] = ""
+        return article
+
+    # ------------------------------------------------------------------
+    # Enrichissement Sylob
+    # ------------------------------------------------------------------
+
+    def enrichir_depuis_sylob(self, ean: str, ref: str = "") -> Optional[dict]:
+        """
+        Interroge Sylob pour obtenir PO/Lot à partir d'un EAN ou référence.
+        Découplé du lookup article pour ne pas bloquer les nouveaux produits.
+
+        Args:
+            ean: Code EAN scanné.
+            ref: Référence interne article (optionnel).
+
+        Returns:
+            Dict {"po": ..., "lot": ...} ou None si aucun résultat.
+        """
+        try:
+            result = self.sylob.chercher_lot_par_po(po="", art=ref, lot="", ean=ean)
+            if result:
+                logger.info(f"[Sylob] PO={result.get('po')} LOT={result.get('lot')} (EAN={ean})")
+            return result
+        except Exception as e:
+            logger.error(f"[Sylob] Erreur enrichissement : {e}")
             return None
 
-        # 1. Recherche par EAN exact
-        resultat = self.df[self.df['ean'] == code]
-        
-        # 2. Si rien trouvé, on teste la référence exacte
-        if resultat.empty:
-            resultat = self.df[self.df['ref'] == code]
-            
-        # 3. Recherche souple (coeur de code) pour les variations matérielles (douchettes)
-        if resultat.empty and len(code) >= 10:
-            coeur_du_code = code[1:11] 
-            resultat = self.df[self.df['ean'].str.contains(coeur_du_code, na=False)]
-            if not resultat.empty:
-                logging.info(f"[INFO] Article trouvé via recherche du coeur de code ({coeur_du_code})")
-
-        if not resultat.empty:
-            article = resultat.iloc[0].to_dict()
-            article['source'] = 'CSV Local'
-            # Sanity check : forcer une string vide au lieu de valeurs NaN
-            article['po'] = article.get('po', '') if pd.notna(article.get('po')) else ''
-            article['lot'] = article.get('lot', '') if pd.notna(article.get('lot')) else ''
-            
-            logging.info(f"[SUCCÈS] Article validé : {article['designation']}")
-            return article
-            
-        logging.warning(f"[ERREUR] Aucun article trouvé pour le code : {code}")
-        return None
 
 if __name__ == "__main__":
     loader = DataLoader()
-    test_code = "10120098"
-    print(f"Test recherche {test_code} :", loader.chercher_article(test_code))
+    print(loader.chercher_article("10120098"))

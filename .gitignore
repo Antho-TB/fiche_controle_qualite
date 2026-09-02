@@ -40,3 +40,6 @@ build.log
 2_Fiches_Creees/
 logs/
 data/
+
+# Packing Lists fournisseurs (donnees, volumineuses, non versionnees)
+1_Packing_Lists_A_Traiter/
