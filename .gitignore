@@ -43,3 +43,9 @@ data/
 
 # Packing Lists fournisseurs (donnees, volumineuses, non versionnees)
 1_Packing_Lists_A_Traiter/
+
+# Binaires OCR portables (livres dans le zip, jamais versionnes)
+tools/
+
+# Cache OCR local
+.cache/

@@ -13,8 +13,14 @@ if (-not (Test-Path $dest)) {
 }
 
 # 2. Liste des éléments essentiels à copier
-$foldersToCopy = @("0_Modele_Et_Donnees", "1_Packing_Lists_A_Traiter", "2_Fiches_Creees")
-$filesToCopy = @(".env", "dist\Scanner_Qualite.exe")
+# tools/ embarque les binaires OCR (tesseract + poppler) : les Packing Lists
+# scannees ne sont exploitables que si ce dossier suit l executable.
+$foldersToCopy = @("0_Modele_Et_Donnees", "1_Packing_Lists_A_Traiter", "2_Fiches_Creees", "tools")
+
+# Le .env n est PLUS deploye : les credentials Sylob viennent du secret unique
+# tb-sylob-client dans kv-dtpf-prod. Copier un secret en clair sur un partage
+# reseau etait la faille la plus grave de la livraison precedente.
+$filesToCopy = @("dist\Scanner_Qualite.exe")
 
 # --- Nettoyage des anciennes versions Python ---
 $oldItems = @("src", "requirements.txt", "LANCER_SCANNER.bat", "data", "outputs")

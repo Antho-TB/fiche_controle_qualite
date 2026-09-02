@@ -26,13 +26,12 @@ DOSSIER_DEFAUT = os.path.join(os.path.dirname(__file__), "..",
                               "1_Packing_Lists_A_Traiter", "archives")
 
 
-def analyser(dossier: str, avec_ocr: bool = False) -> list[dict]:
+def analyser(dossier: str) -> list[dict]:
     """
     Analyse chaque PDF du dossier sans effet de bord.
 
     Args:
         dossier: Dossier contenant les Packing Lists a mesurer.
-        avec_ocr: True pour laisser le moteur OCR s initialiser.
 
     Returns:
         Liste de rapports par fichier.
@@ -41,10 +40,10 @@ def analyser(dossier: str, avec_ocr: bool = False) -> list[dict]:
     extracteur.pdf_dir = dossier
     extracteur.articles_pdf = {}
     extracteur.rapports = []
+    extracteur.ocr_available = False
     extracteur.adi_available = False
-    extracteur._adi_client = None
-    if avec_ocr:
-        extracteur._init_adi_client()
+    extracteur._ocr = None
+    extracteur._init_ocr()
     for chemin in sorted(glob.glob(os.path.join(dossier, "*.pdf"))):
         extracteur._extract_from_pdf(chemin)
     return extracteur.rapports

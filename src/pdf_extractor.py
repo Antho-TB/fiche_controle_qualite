@@ -7,8 +7,13 @@ Formats PDF fournisseurs identifies sur les archives :
   C - PO NO.: / N deg. LOT: (Yangjiang Yinhong)
   D - Jieyang Wanxin : PO(8)+Lot(5)+Item(8) sans espaces, tableau chinois
   E - JAZZWAY : CUSTOMER P.O. NO. + code 8 chiffres
-  F - PDFs scannes (images pures) -> ADI obligatoire
-- adi_available (bool public) expose l etat du moteur pour le status board
+  F - PDFs scannes (images pures) -> OCR local obligatoire (src/ocr_engine.py)
+- ocr_available (bool public) expose l etat du moteur pour le status board
+
+Azure Document Intelligence a ete abandonne : il exigeait Key Vault, un reseau
+sortant et des packages Azure que l executable livre n embarquait pas. Il n a
+donc jamais tourne en production, et son absence etait avalee silencieusement.
+Le moteur est desormais local (pytesseract, langues eng+fra+chi_sim).
 """
 
 import os
@@ -19,6 +24,8 @@ import shutil
 import time
 from typing import Optional
 
+from src.ocr_engine import OCREngine
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,34 +34,6 @@ def get_base_path() -> str:
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-
-def _load_adi_credentials() -> tuple[Optional[str], Optional[str]]:
-    """
-    Charge endpoint et cle ADI depuis Key Vault (DefaultAzureCredential),
-    puis fallback .env local.
-
-    Returns:
-        Tuple (endpoint, key) ou (None, None) si indisponible.
-    """
-    try:
-        from azure.identity import DefaultAzureCredential
-        from azure.keyvault.secrets import SecretClient
-        vault_url = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
-        kv = SecretClient(vault_url=vault_url, credential=DefaultAzureCredential())
-        return kv.get_secret("DOCINT-ENDPOINT").value, kv.get_secret("DOCINT-KEY").value
-    except Exception:
-        pass
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(get_base_path(), ".env"))
-        endpoint = os.getenv("DOCINT_ENDPOINT", "")
-        key = os.getenv("DOCINT_KEY", "")
-        if endpoint and key:
-            return endpoint, key
-    except Exception:
-        pass
-    return None, None
 
 
 class PDFExtractor:
@@ -75,33 +54,22 @@ class PDFExtractor:
         self.pdf_dir: str = pdf_dir or os.path.join(get_base_path(), "1_Packing_Lists_A_Traiter")
         self.articles_pdf: dict[str, list[dict]] = {}
         self.rapports: list[dict] = []
+        self.ocr_available: bool = False
         self.adi_available: bool = False
-        self._adi_client = None
-        self._init_adi_client()
+        self._ocr: Optional[OCREngine] = None
+        self._init_ocr()
         self._load_all_pdfs()
 
     # ------------------------------------------------------------------
     # Initialisation ADI
     # ------------------------------------------------------------------
 
-    def _init_adi_client(self) -> None:
-        """Charge le client ADI. Positionne adi_available."""
-        try:
-            from azure.ai.documentintelligence import DocumentIntelligenceClient
-            from azure.core.credentials import AzureKeyCredential
-            endpoint, key = _load_adi_credentials()
-            if not endpoint or not key:
-                logger.warning("[ADI] Credentials introuvables - fallback PyPDF.")
-                return
-            self._adi_client = DocumentIntelligenceClient(
-                endpoint=endpoint, credential=AzureKeyCredential(key)
-            )
-            self.adi_available = True
-            logger.info("[ADI] Client Document Intelligence initialise.")
-        except ImportError:
-            logger.warning("[ADI] Package azure-ai-documentintelligence absent - fallback PyPDF.")
-        except Exception as e:
-            logger.warning("[ADI] Init echouee (%s) - fallback PyPDF.", e)
+    def _init_ocr(self) -> None:
+        """Initialise le moteur OCR local et positionne ocr_available."""
+        self._ocr = OCREngine()
+        self.ocr_available = self._ocr.disponible
+        # Compatibilite ascendante : le status board historique lisait ce nom.
+        self.adi_available = self.ocr_available
 
     # ------------------------------------------------------------------
     # Chargement dossier
@@ -137,12 +105,7 @@ class PDFExtractor:
         """
         nom = os.path.basename(pdf_path)
         try:
-            if self.adi_available and self._adi_client:
-                results = self._extract_with_adi(pdf_path)
-                source = "ADI"
-            else:
-                results = self._extract_with_pypdf_fallback(pdf_path)
-                source = "PyPDF"
+            results, source = self._extract_from_text(pdf_path)
             for art_code, infos in results.items():
                 if art_code not in self.articles_pdf:
                     self.articles_pdf[art_code] = []
@@ -183,78 +146,24 @@ class PDFExtractor:
         return resume
 
     # ------------------------------------------------------------------
-    # Moteur ADI
+    # Extraction du texte puis parsing par format fournisseur
     # ------------------------------------------------------------------
 
-    def _extract_with_adi(self, pdf_path: str) -> dict[str, list[dict]]:
-        """Analyse via ADI prebuilt-layout. Extrait PO/Lot + codes articles."""
-        with open(pdf_path, "rb") as f:
-            poller = self._adi_client.begin_analyze_document(
-                "prebuilt-layout",
-                analyze_request=f,
-                content_type="application/octet-stream",
-            )
-        doc = poller.result()
-        global_po, global_lot, fournisseur = self._parse_adi_kv_pairs(doc)
-        art_codes = self._parse_adi_tables(doc)
-        info = {"po": global_po, "lot": global_lot, "fournisseur": fournisseur}
-        return {code: [info] for code in art_codes} if art_codes else {}
-
-    def _parse_adi_kv_pairs(self, doc: object) -> tuple[str, str, str]:
+    def _extract_from_text(self, pdf_path: str) -> tuple[dict[str, list[dict]], str]:
         """
-        Extrait PO, Lot, fournisseur depuis les key_value_pairs ADI.
-        Gere les valeurs multiples (separateur) - retourne le premier.
-        """
-        po, lot, fournisseur = "", "", ""
-        for kv in getattr(doc, "key_value_pairs", []) or []:
-            if not kv.key or not kv.value:
-                continue
-            k = (kv.key.content or "").strip().lower()
-            v = (kv.value.content or "").strip()
-            if not po and k in self._PO_KEYS:
-                m = re.search(r"\d{6,}", v)
-                if m:
-                    po = m.group(0)
-            if not lot and k in self._LOT_KEYS:
-                m = re.search(r"\d{4,}", v)
-                if m:
-                    lot = m.group(0)
-        for para in (getattr(doc, "paragraphs", []) or [])[:5]:
-            content = (para.content or "").strip()
-            if content and len(content) > 3 and "PACKING" not in content.upper():
-                fournisseur = content
-                break
-        return po, lot, fournisseur
+        Extrait les articles d une Packing List, quelle que soit sa nature.
 
-    def _parse_adi_tables(self, doc: object) -> list[str]:
-        """Extrait codes articles (6-10 chiffres) depuis les tables ADI."""
-        art_pattern = re.compile(r"^\d{6,10}$")
-        codes: list[str] = []
-        for table in getattr(doc, "tables", []) or []:
-            for cell in table.cells:
-                content = (cell.content or "").strip()
-                if art_pattern.match(content) and content not in codes:
-                    codes.append(content)
-        return codes
+        Le texte vient du PDF lui meme quand il en contient, du cache OCR, ou
+        d un OCR local pour les scans. Les regex par format fournisseur sont
+        ensuite appliquees a l identique.
 
-    # ------------------------------------------------------------------
-    # Fallback PyPDF
-    # ------------------------------------------------------------------
-
-    def _extract_with_pypdf_fallback(self, pdf_path: str) -> dict[str, list[dict]]:
+        Returns:
+            Tuple (resultats par code article, nom du moteur utilise).
         """
-        Extraction PyPDF + regex sur les formats A, B, C, D, E.
-        Gere les PO/Lots multiples du Format A (template TB).
-        """
-        from pypdf import PdfReader
         results: dict[str, list[dict]] = {}
-        reader = PdfReader(pdf_path)
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        text, moteur = self._ocr.extraire_texte(pdf_path)
         if not text.strip():
-            logger.error("[ECHEC] %s : PDF image pure (0 caractere de texte). "
-                         "Un moteur OCR est indispensable pour ce fournisseur.",
-                         os.path.basename(pdf_path))
-            return results
+            return results, moteur
 
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         fournisseur = self._extract_fournisseur(lines)
@@ -286,7 +195,7 @@ class PDFExtractor:
                 results.setdefault(art_code, [])
                 if info not in results[art_code]:
                     results[art_code].append(info)
-        return results
+        return results, moteur
 
     def _extract_fournisseur(self, lines: list[str]) -> str:
         """Extrait le nom du fournisseur depuis les premieres lignes."""

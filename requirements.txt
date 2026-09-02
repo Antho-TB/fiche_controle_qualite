@@ -3,10 +3,17 @@ openpyxl>=3.1.0
 pypdf>=4.0.0
 
 chardet>=5.2.0,<6.0.0
-charset-normalizer>=3.3.2,<4.0.0
+charset-normalizer>=3.3.2,<6.0.0
 urllib3>=1.26.0,<2.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-azure-identity
-azure-keyvault-secrets
-azure-ai-documentintelligence>=1.0.0
+
+# Credentials : secret unique tb-sylob-client dans kv-dtpf-prod
+azure-identity>=1.17.0
+azure-keyvault-secrets>=4.8.0
+
+# OCR local des Packing Lists scannees (remplace Azure Document Intelligence).
+# Necessite AUSSI les binaires tesseract (langues eng, fra, chi_sim) et poppler,
+# livres dans tools/ par scripts/preparer_ocr_portable.ps1.
+pytesseract>=0.3.10
+pdf2image>=1.17.0
