@@ -20,6 +20,12 @@ import os
 import sys
 import logging
 
+logger = logging.getLogger(__name__)
+
+# Cellule du lot fournisseur. Elle sort du gabarit FOR-ACH-30-2 d origine :
+# a ajuster avec le service qualite si la mise en page ne convient pas.
+CELLULE_LOT_FOURNISSEUR = "H6"
+
 def get_base_path() -> str:
     """
     Retourne le chemin d'exécution absolu.
@@ -108,12 +114,32 @@ class ExcelHandler:
             set_red_value('B6', article_info['designation'])
 
             # 3. Traçabilité
+            # Deux lots distincts et non interchangeables : le lot Sylob, qui
+            # est notre référence interne, et le lot imprimé par le fournisseur
+            # sur la Packing List. Les afficher dans la même case masquait les
+            # divergences, qui sont précisément ce qu'un contrôle réception doit
+            # voir. CELLULE_LOT_FOURNISSEUR sort du gabarit d'origine : à faire
+            # valider visuellement par le service qualité avant déploiement.
             set_red_value('G5', article_info.get('po', ''))
             set_red_value('G6', lot)
+            lot_fournisseur = str(
+                article_info.get('lot_fournisseur', '')
+            ).replace('nan', '').strip()
             
             # 4. Nettoyage préventif de la colonne H (Commentaires du template vierge)
             for row in range(5, 51):
                 ws[f'H{row}'] = None
+
+            # Le lot fournisseur est écrit APRÈS le nettoyage de la colonne H,
+            # sinon il serait effacé.
+            if lot_fournisseur and lot_fournisseur != lot:
+                set_red_value(CELLULE_LOT_FOURNISSEUR, "Lot frn : %s" % lot_fournisseur)
+                logger.warning(
+                    "[ATTENTION] Lot fournisseur %s different du lot Sylob %s.",
+                    lot_fournisseur, lot or "(vide)")
+            elif lot_fournisseur:
+                logger.info("[INFO] Lot fournisseur et lot Sylob concordent (%s).",
+                            lot_fournisseur)
                 
             # 5. Injection conditionnelle Fournisseur et EANs supplémentaires
             fournisseur = article_info.get('fournisseur', '')

@@ -57,83 +57,131 @@ def afficher_status_board(
     print("=" * 52)
 
 
+def _indice_pdf(pdf_data: PDFExtractor, code_scanne: str,
+                ref: str) -> tuple[str, str, str]:
+    """
+    Extrait de la Packing List les indices utiles, sans leur faire confiance.
+
+    Returns:
+        Tuple (po_indice, lot_fournisseur, fournisseur_pdf). Chaines vides si
+        la Packing List ne dit rien de fiable sur cet article.
+    """
+    infos = pdf_data.chercher_infos_pdf(code_article=code_scanne, ref_article=ref)
+    if not infos:
+        return "", "", ""
+    premier = infos[0]
+    if premier.get("po_ambigu"):
+        candidats = premier.get("po_candidats", [])
+        print("     [PL] Plusieurs commandes dans l en-tete : "
+              + ", ".join(candidats))
+        return "", "", premier.get("fournisseur", "")
+    return (premier.get("po", ""), premier.get("lot", ""),
+            premier.get("fournisseur", ""))
+
+
+def _choisir_commande(candidats: list) -> Optional[object]:
+    """
+    Fait arbitrer par l operateur la commande d achat concernee.
+
+    Les candidats viennent du DWH, donc chacun porte son fournisseur, sa
+    quantite et son etat de reception : l operateur choisit sur des faits, pas
+    sur un numero nu.
+    """
+    print("     [ATTENTION] Plusieurs commandes portent cet article :")
+    for index, commande in enumerate(candidats, start=1):
+        print("        %d. PO %s | %s | %.0f %s | reception %s"
+              % (index, commande.numero, commande.fournisseur[:38],
+                 commande.quantite, "pce", commande.etat_reception))
+    saisie = input("     Numero de la ligne (Entree = laisser le PO vide) : ").strip()
+    if not saisie.isdigit() or not 1 <= int(saisie) <= len(candidats):
+        print("     [INFO] PO laisse vide, a completer manuellement.")
+        return None
+    return candidats[int(saisie) - 1]
+
+
 def _enrichir_donnees(
     article: dict,
     loader: DataLoader,
     pdf_data: PDFExtractor,
     code_scanne: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     """
-    Construit final_po / final_lot / final_fournisseur en cascade :
-    Sylob → PDF → CSV.
+    Construit PO, lot Sylob, lot fournisseur et fournisseur.
+
+    Ordre : DWH (source de verite), Packing List (indice de desambiguisation),
+    API Sylob puis CSV (repli hors ligne). Une case vide est preferee a une
+    case fausse.
 
     Returns:
-        Tuple (final_po, final_lot, final_fournisseur).
+        Tuple (po, lot_sylob, lot_fournisseur, fournisseur).
     """
-    final_po, final_lot, final_fournisseur = "", "", ""
+    ref = article.get("ref", "")
+    po_indice, lot_fournisseur, fournisseur_pdf = _indice_pdf(
+        pdf_data, code_scanne, ref)
 
-    # Priorité 1 — Sylob
-    result = loader.enrichir_depuis_sylob(ean=code_scanne, ref=article.get('ref', ''))
-    if result:
-        final_po = result.get('po', '')
-        final_lot = result.get('lot', '')
-        if final_po or final_lot:
-            print(f"     [Sylob] CMD={final_po} | LOT={final_lot}")
+    resultat = loader.enrichir_depuis_dwh(article, po_indice=po_indice)
+    po = resultat["po"]
+    lot_sylob = resultat["lot_sylob"]
+    fournisseur = resultat["fournisseur"]
 
-    # Priorité 2 — PDF (comble les trous)
-    pdf_infos = pdf_data.chercher_infos_pdf(
-        code_article=code_scanne, ref_article=article.get('ref', '')
-    )
-    if pdf_infos and pdf_infos[0].get("po_ambigu"):
-        candidats = pdf_infos[0].get("po_candidats", [])
-        lots = pdf_infos[0].get("lot_candidats", [])
-        print("     [ATTENTION] La Packing List porte plusieurs commandes : "
-              + ", ".join(candidats))
-        choix = _choisir_po(candidats, lots)
-        if choix:
-            final_po, final_lot = choix
-        if not final_fournisseur and pdf_infos[0].get("fournisseur"):
-            final_fournisseur = pdf_infos[0]["fournisseur"]
-        pdf_infos = []
+    if resultat["ambigu"]:
+        choisie = _choisir_commande(resultat["candidats_po"])
+        if choisie is not None:
+            po, fournisseur = choisie.numero, choisie.fournisseur
 
-    if pdf_infos:
-        src = "ADI" if pdf_data.adi_available else "PyPDF"
-        added = []
-        if not final_po and pdf_infos[0].get('po'):
-            final_po = pdf_infos[0]['po']
-            added.append(f"PO:{final_po}")
-        if not final_lot and pdf_infos[0].get('lot'):
-            final_lot = pdf_infos[0]['lot']
-            added.append(f"LOT:{final_lot}")
-        if not final_fournisseur and pdf_infos[0].get('fournisseur'):
-            final_fournisseur = pdf_infos[0]['fournisseur']
-            added.append(f"Fourn:{final_fournisseur}")
-        if added:
-            print(f"     [{src}] Complété : {', '.join(added)}")
+    if po:
+        print("     [DWH] PO=%s | %s" % (po, fournisseur[:40]))
+    if lot_sylob:
+        print("     [DWH] Lot Sylob=%s" % lot_sylob)
 
-    # Priorité 3 — CSV (fallback ultime)
-    csv_fields = {
-        'po': str(article.get('po', '')).replace('nan', '').strip(),
-        'lot': str(article.get('lot', '')).replace('nan', '').strip(),
-        'fournisseur': str(article.get('fournisseur', '')).replace('nan', '').strip(),
-    }
-    added = []
-    if not final_po and csv_fields['po']:
-        final_po = csv_fields['po']
-        added.append(f"PO:{final_po}")
-    if not final_lot and csv_fields['lot']:
-        final_lot = csv_fields['lot']
-        added.append(f"LOT:{final_lot}")
-    if not final_fournisseur and csv_fields['fournisseur']:
-        final_fournisseur = csv_fields['fournisseur']
-        added.append(f"Fourn:{final_fournisseur}")
-    if added:
-        print(f"     [CSV] Fallback : {', '.join(added)}")
+    po, lot_sylob = _completer_par_sylob(loader, code_scanne, ref, po, lot_sylob)
+    return _completer_par_csv(article, po, lot_sylob, lot_fournisseur,
+                              fournisseur or fournisseur_pdf)
 
-    if not final_po and not final_lot:
-        print("     [!] Aucun PO ni LOT identifié après tous les fallbacks.")
 
-    return final_po, final_lot, final_fournisseur
+def _completer_par_sylob(loader: DataLoader, code_scanne: str, ref: str,
+                         po: str, lot: str) -> tuple[str, str]:
+    """Comble les trous restants avec l API Sylob temps reel."""
+    if po and lot:
+        return po, lot
+    resultat = loader.enrichir_depuis_sylob(ean=code_scanne, ref=ref)
+    if not resultat:
+        return po, lot
+    ajouts = []
+    if not po and resultat.get("po"):
+        po = resultat["po"]
+        ajouts.append("PO:%s" % po)
+    if not lot and resultat.get("lot"):
+        lot = resultat["lot"]
+        ajouts.append("LOT:%s" % lot)
+    if ajouts:
+        print("     [Sylob] Complete : %s" % ", ".join(ajouts))
+    return po, lot
+
+
+def _completer_par_csv(article: dict, po: str, lot_sylob: str,
+                       lot_fournisseur: str,
+                       fournisseur: str) -> tuple[str, str, str, str]:
+    """Dernier repli hors ligne : les colonnes du referentiel CSV."""
+    def propre(cle: str) -> str:
+        return str(article.get(cle, "")).replace("nan", "").strip()
+
+    ajouts = []
+    if not po and propre("po"):
+        po = propre("po")
+        ajouts.append("PO:%s" % po)
+    if not lot_sylob and propre("lot"):
+        lot_sylob = propre("lot")
+        ajouts.append("LOT:%s" % lot_sylob)
+    if not fournisseur and propre("fournisseur"):
+        fournisseur = propre("fournisseur")
+        ajouts.append("Fourn:%s" % fournisseur)
+    if ajouts:
+        print("     [CSV] Repli : %s" % ", ".join(ajouts))
+    if not po and not lot_sylob:
+        print("     [!] Aucun PO ni lot identifie. La fiche sortira avec ces "
+              "cases vides, a completer a la main.")
+    return po, lot_sylob, lot_fournisseur, fournisseur
 
 
 def _traiter_article_inconnu(
@@ -253,11 +301,11 @@ def lancer_session_scan() -> None:
                 print("     [ANNULE] Aucune fiche generee.\n")
                 continue
 
-            final_po, final_lot, final_fournisseur = _enrichir_donnees(
-                article, loader, pdf_data, code_scanne
-            )
+            final_po, final_lot, lot_fournisseur, final_fournisseur = (
+                _enrichir_donnees(article, loader, pdf_data, code_scanne))
 
             article_clone = {**article, 'po': final_po, 'lot': final_lot,
+                             'lot_fournisseur': lot_fournisseur,
                              'fournisseur': final_fournisseur}
 
             print("     Génération de la fiche Excel...")

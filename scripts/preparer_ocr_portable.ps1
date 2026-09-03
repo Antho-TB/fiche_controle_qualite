@@ -56,16 +56,37 @@ if (-not (Test-Path (Join-Path $outils "tesseract\tesseract.exe"))) {
     Copy-Item $source -Destination (Join-Path $outils "tesseract") -Recurse -Force
 }
 
+# L installeur winget est silencieux et ne pose donc pas les langues optionnelles.
+# On telecharge directement les modeles manquants depuis le depot officiel
+# tessdata_fast : plus leger que tessdata, precision suffisante sur des
+# Packing Lists imprimees.
 $tessdata = Join-Path $outils "tesseract\tessdata"
+New-Item -ItemType Directory -Force -Path $tessdata | Out-Null
+$baseModeles = "https://github.com/tesseract-ocr/tessdata_fast/raw/main"
 foreach ($langue in @("eng", "fra", "chi_sim")) {
     $fichier = Join-Path $tessdata "$langue.traineddata"
     if (Test-Path $fichier) {
         Write-Host "  -> langue $langue presente" -ForegroundColor Green
-    } else {
-        Write-Host "  -> langue $langue MANQUANTE dans $tessdata" -ForegroundColor Red
-        Write-Host "     Relancer l installeur tesseract en cochant cette langue."
+        continue
+    }
+    Write-Host "  -> telechargement de la langue $langue..." -ForegroundColor Yellow
+    try {
+        Invoke-WebRequest -Uri "$baseModeles/$langue.traineddata" -OutFile $fichier
+        Write-Host "     langue $langue installee" -ForegroundColor Green
+    } catch {
+        Write-Host "     ECHEC du telechargement de $langue : $_" -ForegroundColor Red
     }
 }
+
+# Allegement : la copie de l installeur embarque des fichiers inutiles a
+# l execution (documentation, modeles de langues non utilises).
+foreach ($inutile in @("doc", "tessdata\configs\api_config", "uninstall.exe")) {
+    $chemin = Join-Path $outils "tesseract\$inutile"
+    if (Test-Path $chemin) { Remove-Item $chemin -Recurse -Force -ErrorAction SilentlyContinue }
+}
+Get-ChildItem $tessdata -Filter *.traineddata |
+    Where-Object { $_.BaseName -notin @("eng", "fra", "chi_sim", "osd") } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
 
 $taille = (Get-ChildItem $outils -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ""
