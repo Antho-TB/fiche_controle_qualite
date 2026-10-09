@@ -146,10 +146,12 @@ class DWHRepository:
     def _lire_identifiants(self) -> Optional[tuple[str, str]]:
         """Lit login et mot de passe PostgreSQL dans Key Vault, sans les journaliser."""
         try:
-            from azure.identity import DefaultAzureCredential
             from azure.keyvault.secrets import SecretClient
-            kv = SecretClient(vault_url=_VAULT_URL,
-                              credential=DefaultAzureCredential())
+            from src.azure_auth import obtenir_credential
+            credential = obtenir_credential()
+            if credential is None:
+                return None
+            kv = SecretClient(vault_url=_VAULT_URL, credential=credential)
             return (kv.get_secret(_SECRET_LOGIN).value,
                     kv.get_secret(_SECRET_MOT_DE_PASSE).value)
         except Exception as e:

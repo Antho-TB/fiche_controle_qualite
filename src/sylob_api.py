@@ -87,10 +87,12 @@ class SylobAPI:
             True si les cinq champs attendus sont presents, False sinon.
         """
         try:
-            from azure.identity import DefaultAzureCredential
             from azure.keyvault.secrets import SecretClient
-            kv = SecretClient(vault_url=self._VAULT_URL,
-                              credential=DefaultAzureCredential())
+            from src.azure_auth import obtenir_credential
+            credential = obtenir_credential()
+            if credential is None:
+                return False
+            kv = SecretClient(vault_url=self._VAULT_URL, credential=credential)
             charge = json.loads(kv.get_secret(self._SECRET_CLIENT).value)
         except ImportError as e:
             logger.error("[ECHEC] Packages Azure absents (%s). Installer "
@@ -114,10 +116,13 @@ class SylobAPI:
     def _load_from_keyvault_legacy(self) -> bool:
         """Repli : ancien Key Vault, un secret par variable."""
         try:
-            from azure.identity import DefaultAzureCredential
             from azure.keyvault.secrets import SecretClient
+            from src.azure_auth import obtenir_credential
+            credential = obtenir_credential()
+            if credential is None:
+                return False
             kv = SecretClient(vault_url=self._VAULT_URL_LEGACY,
-                              credential=DefaultAzureCredential())
+                              credential=credential)
             valeurs = [kv.get_secret(nom).value for nom in self._SECRET_NAMES]
         except Exception as e:
             logger.warning("[ATTENTION] Ancien Key Vault indisponible : %s", e)

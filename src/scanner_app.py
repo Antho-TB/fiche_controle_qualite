@@ -332,5 +332,20 @@ def lancer_session_scan() -> None:
             print(f"\n[!] Erreur inattendue : {e}")
 
 
-if __name__ == "__main__":
+def main() -> int:
+    """
+    Point d entree. `--verifier-poste` lance le controle des prerequis.
+
+    Junior Tip : l operateur du service qualite n a pas Python installe. Le
+    controle des prerequis doit donc etre appelable depuis l executable lui
+    meme, sinon personne ne le lancera jamais.
+    """
+    if "--verifier-poste" in sys.argv:
+        from src.preflight import main as verifier
+        return verifier()
     lancer_session_scan()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
