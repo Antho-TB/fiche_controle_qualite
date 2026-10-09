@@ -14,11 +14,14 @@ formules pré-existantes dans le fichier modèle (FOR-ACH-30-2). En utilisant op
 du document qualité certifié.
 """
 
-import openpyxl
-from datetime import datetime
+import io
+import logging
 import os
 import sys
-import logging
+from datetime import datetime
+from typing import Optional
+
+import openpyxl
 
 logger = logging.getLogger(__name__)
 
@@ -58,115 +61,119 @@ class ExcelHandler:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def generer_fiche(self, article_info: dict) -> str:
+    def generer_fiche(self, article_info: dict, operateur: str = "") -> Optional[str]:
         """
-        Remplit une nouvelle fiche basée sur le template Excel avec les données de l'article.
-        
-        Stratégie :
-        - Chargement du fichier original.
-        - Injection par coordonnées exactes (ex: B5 pour la référence).
-        - Nettoyage préventif (colonne H) pour éviter des reliquats de données si 
-          le template a été mal sauvegardé précédemment.
-        - Sauvegarde sous un nom horodaté (timestamp) pour éviter tout écrasement accidentel.
-        
-        Args:
-            article_info (dict): Les métadonnées consolidées de l'article.
-            
+        Genere la fiche et l'ecrit dans 2_Fiches_Creees (usage poste / executable).
+
         Returns:
-            str: Le chemin d'accès absolu au fichier Excel fraîchement généré (ou None si échec).
+            Chemin absolu de la fiche, ou None si l'ecriture echoue.
+        """
+        try:
+            nom, contenu = self.construire_fiche(article_info, operateur)
+        except Exception as e:
+            logger.error("[ECHEC] Generation de la fiche : %s", e, exc_info=True)
+            return None
+        chemin_sortie = os.path.join(self.output_dir, nom)
+        try:
+            with open(chemin_sortie, "wb") as flux:
+                flux.write(contenu)
+        except OSError as e:
+            # Cas typique : une fiche du meme nom ouverte dans Excel.
+            logger.error("[ECHEC] Ecriture de %s : %s", chemin_sortie, e)
+            return None
+        logger.info("[SUCCES] Fiche generee : %s", chemin_sortie)
+        return chemin_sortie
+
+    def construire_fiche(self, article_info: dict,
+                         operateur: str = "") -> tuple[str, bytes]:
+        """
+        Remplit le gabarit FOR-ACH-30-2 en memoire, sans rien ecrire sur disque.
+
+        Strategie :
+        - openpyxl edite des cellules precises et conserve la mise en forme du
+          document qualite certifie (pandas l'ecraserait).
+        - Nom horodate Fiche_<ref>_<lot>_<horodatage>.xlsx : jamais d'ecrasement.
+        - L'operateur (identite Entra en Web App) est inscrit dans les
+          proprietes du classeur : la tracabilite ne depend pas d'une cellule
+          que le gabarit ne prevoit pas.
+
+        Args:
+            article_info: Donnees consolidees de l'article.
+            operateur: Identite de la personne qui genere la fiche.
+
+        Returns:
+            Tuple (nom du fichier, contenu xlsx).
+
+        Raises:
+            FileNotFoundError: si le gabarit est absent.
         """
         if not os.path.exists(self.template_path):
-            logging.error(f"[ERREUR] Template Excel introuvable : {self.template_path}")
-            return None
-
-        # Stratégie de nommage (Traçabilité)
-        # Format : Fiche_[Ref]_[Lot]_[Timestamp].xlsx
+            raise FileNotFoundError("Gabarit Excel introuvable : %s" % self.template_path)
         now = datetime.now()
-        timestamp = now.strftime("%Y%m%d_%H%M%S")
-        
-        # Le lot peut contenir des caractères problématiques, on s'assure qu'il est propre 
         lot = str(article_info.get('lot', '')).replace("/", "-").replace("\\", "-")
         lot_suffix = f"_{lot}" if lot else ""
-        
-        nom_sortie = f"Fiche_{article_info['ref']}{lot_suffix}_{timestamp}.xlsx"
-        chemin_sortie = os.path.join(self.output_dir, nom_sortie)
+        ref = str(article_info['ref']).replace("/", "-").replace("\\", "-")
+        nom = f"Fiche_{ref}{lot_suffix}_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-        try:
-            # openpyxl conserve la mise en forme du template
-            wb = openpyxl.load_workbook(self.template_path)
-            ws = wb.active
-            
-            # --- Injection des données métier ---
-            from openpyxl.styles import Font
-            red_font = Font(color="FF0000")
-            
-            # Fonction utilitaire pour injecter en rouge
-            def set_red_value(cell_coord, value):
-                ws[cell_coord] = value
-                ws[cell_coord].font = red_font
-                
-            # 1. Dates (Format FR standard)
-            set_red_value('B4', now.strftime("%d/%m/%Y"))
-            set_red_value('F4', now.strftime("%d/%m/%Y"))
-            
-            # 2. Identification Produit
-            set_red_value('B5', article_info['ref'])
-            set_red_value('B6', article_info['designation'])
+        wb = openpyxl.load_workbook(self.template_path)
+        self._remplir(wb.active, article_info, lot, now)
+        if operateur:
+            wb.properties.creator = operateur
+            wb.properties.lastModifiedBy = operateur
+        tampon = io.BytesIO()
+        wb.save(tampon)
+        return nom, tampon.getvalue()
 
-            # 3. Traçabilité
-            # Deux lots distincts et non interchangeables : le lot Sylob, qui
-            # est notre référence interne, et le lot imprimé par le fournisseur
-            # sur la Packing List. Les afficher dans la même case masquait les
-            # divergences, qui sont précisément ce qu'un contrôle réception doit
-            # voir. CELLULE_LOT_FOURNISSEUR sort du gabarit d'origine : à faire
-            # valider visuellement par le service qualité avant déploiement.
-            set_red_value('G5', article_info.get('po', ''))
-            set_red_value('G6', lot)
-            lot_fournisseur = str(
-                article_info.get('lot_fournisseur', '')
-            ).replace('nan', '').strip()
-            
-            # 4. Nettoyage préventif de la colonne H (Commentaires du template vierge)
-            for row in range(5, 51):
-                ws[f'H{row}'] = None
+    def _remplir(self, ws: object, article_info: dict, lot: str,
+                 now: datetime) -> None:
+        """Injecte les donnees metier dans les cellules du gabarit, en rouge."""
+        from openpyxl.styles import Font
+        red_font = Font(color="FF0000")
 
-            # Le lot fournisseur est écrit APRÈS le nettoyage de la colonne H,
-            # sinon il serait effacé.
-            if lot_fournisseur and lot_fournisseur != lot:
-                set_red_value(CELLULE_LOT_FOURNISSEUR, "Lot frn : %s" % lot_fournisseur)
-                logger.warning(
-                    "[ATTENTION] Lot fournisseur %s different du lot Sylob %s.",
-                    lot_fournisseur, lot or "(vide)")
-            elif lot_fournisseur:
-                logger.info("[INFO] Lot fournisseur et lot Sylob concordent (%s).",
-                            lot_fournisseur)
-                
-            # 5. Injection conditionnelle Fournisseur et EANs supplémentaires
-            fournisseur = article_info.get('fournisseur', '')
-            if fournisseur:
-                set_red_value('C9', fournisseur)
-                ws.merge_cells('C9:G9')
-                
-            ean_spcb = str(article_info.get('ean_spcb', '')).replace('nan', '').strip()
-            ean_pcb = str(article_info.get('ean_pcb', '')).replace('nan', '').strip()
-            ho = str(article_info.get('ho', '')).replace('nan', '').strip()
-            
-            if ean_pcb:
-                set_red_value('F12', ean_pcb)
-            if ean_spcb:
-                set_red_value('F14', ean_spcb)
-            if ho:
-                set_red_value('B35', ho)
-            
-            # Sérialisation
-            wb.save(chemin_sortie)
-            logging.info(f"[SUCCÈS] Fiche générée : {chemin_sortie}")
-            return chemin_sortie
+        def set_red_value(cell_coord: str, value: object) -> None:
+            ws[cell_coord] = value
+            ws[cell_coord].font = red_font
 
-        except Exception as e:
-            # Fallback (si le fichier est ouvert par un autre processus par exemple)
-            logging.error(f"[ERREUR] Échec de manipulation du fichier Excel : {e}", exc_info=True)
-            return None
+        set_red_value('B4', now.strftime("%d/%m/%Y"))
+        set_red_value('F4', now.strftime("%d/%m/%Y"))
+        set_red_value('B5', article_info['ref'])
+        set_red_value('B6', article_info['designation'])
+
+        # Deux lots distincts et non interchangeables : le lot Sylob (reference
+        # interne) et le lot imprime par le fournisseur. Les fondre dans une
+        # meme case masquait les divergences, qui sont precisement ce qu'un
+        # controle reception doit voir. CELLULE_LOT_FOURNISSEUR sort du gabarit
+        # d'origine : validation visuelle du service qualite requise.
+        set_red_value('G5', article_info.get('po', ''))
+        set_red_value('G6', lot)
+        lot_fournisseur = _propre(article_info.get('lot_fournisseur', ''))
+
+        # Nettoyage preventif de la colonne H (commentaires du gabarit vierge),
+        # AVANT d'y ecrire le lot fournisseur.
+        for row in range(5, 51):
+            ws[f'H{row}'] = None
+        if lot_fournisseur and lot_fournisseur != lot:
+            set_red_value(CELLULE_LOT_FOURNISSEUR, "Lot frn : %s" % lot_fournisseur)
+            logger.warning("[ATTENTION] Lot fournisseur %s different du lot Sylob %s.",
+                           lot_fournisseur, lot or "(vide)")
+        elif lot_fournisseur:
+            logger.info("[INFO] Lot fournisseur et lot Sylob concordent (%s).",
+                        lot_fournisseur)
+
+        fournisseur = article_info.get('fournisseur', '')
+        if fournisseur:
+            set_red_value('C9', fournisseur)
+            ws.merge_cells('C9:G9')
+        for cellule, cle in (('F12', 'ean_pcb'), ('F14', 'ean_spcb'), ('B35', 'ho')):
+            valeur = _propre(article_info.get(cle, ''))
+            if valeur:
+                set_red_value(cellule, valeur)
+
+
+def _propre(valeur: object) -> str:
+    """Neutralise les 'nan' herites de pandas et les espaces."""
+    return str(valeur or '').replace('nan', '').strip()
+
 
 if __name__ == "__main__":
     # Test unitaire rapide

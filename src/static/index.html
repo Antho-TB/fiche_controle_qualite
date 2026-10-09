@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contrôle réception</title>
+<style>
+  :root { --fond:#f6f7f9; --carte:#fff; --texte:#1d2430; --doux:#5b6574; --bord:#d9dee5;
+          --ok:#1f7a3f; --ko:#b42318; --alerte:#9a6700; --accent:#1f5fbf; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 system-ui,"Segoe UI",sans-serif; background:var(--fond); color:var(--texte); }
+  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:10px 16px;
+           background:var(--carte); border-bottom:1px solid var(--bord); }
+  header h1 { font-size:17px; margin:0 12px 0 0; }
+  .pastille { font-size:13px; padding:2px 8px; border-radius:10px; border:1px solid var(--bord); }
+  .pastille.ok { color:var(--ok); border-color:var(--ok); } .pastille.ko { color:var(--ko); border-color:var(--ko); }
+  #operateur { margin-left:auto; color:var(--doux); font-size:13px; }
+  main { max-width:900px; margin:16px auto; padding:0 16px; }
+  .carte { background:var(--carte); border:1px solid var(--bord); border-radius:8px; padding:16px; margin-bottom:16px; }
+  #code { width:100%; font-size:24px; padding:10px 12px; border:2px solid var(--accent); border-radius:6px; }
+  label { display:block; font-size:13px; color:var(--doux); margin:10px 0 4px; }
+  input[type=text] { width:100%; padding:7px 9px; border:1px solid var(--bord); border-radius:5px; font-size:15px; }
+  .grille { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:0 16px; }
+  button { font-size:15px; padding:9px 16px; border-radius:6px; border:1px solid var(--accent);
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.second { background:#fff; color:var(--accent); }
+  .msg { padding:8px 10px; border-radius:6px; margin:8px 0; }
+  .msg.ko { background:#fdecea; color:var(--ko); } .msg.ok { background:#e8f5ec; color:var(--ok); }
+  .msg.alerte { background:#fff4d6; color:var(--alerte); }
+  .candidat { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid var(--bord); }
+  ul.sources { margin:6px 0 0; padding-left:18px; color:var(--doux); font-size:13px; }
+  .masque { display:none; }
+  #journal li { font-size:13px; color:var(--doux); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contrôle réception</h1>
+  <span class="pastille" id="p-sylob">Sylob</span>
+  <span class="pastille" id="p-dwh">DWH</span>
+  <span class="pastille" id="p-depot">Dossier qualité</span>
+  <span class="pastille" id="p-pl">Packing Lists</span>
+  <span id="operateur"></span>
+</header>
+<main>
+  <section class="carte">
+    <form id="form-scan" autocomplete="off">
+      <label for="code">Scanner un code article (EAN13, EAN14 carton ou référence)</label>
+      <input id="code" name="code" autofocus maxlength="64" inputmode="numeric">
+    </form>
+    <div id="message-scan"></div>
+  </section>
+
+  <section class="carte masque" id="proposition">
+    <h2 id="titre-article" style="margin:0 0 4px;font-size:18px"></h2>
+    <div id="infos-article" style="color:var(--doux);font-size:13px"></div>
+    <div id="alertes"></div>
+    <div id="bloc-confirmation" class="masque">
+      <label><input type="checkbox" id="confirme"> Je confirme que c'est bien cet article</label>
+    </div>
+    <div id="bloc-candidats" class="masque">
+      <label>Plusieurs commandes portent cet article : choisir celle du colis</label>
+      <div id="candidats"></div>
+    </div>
+    <div class="grille">
+      <div><label for="po">N° de commande (PO)</label><input type="text" id="po"></div>
+      <div><label for="lot_sylob">Lot Sylob</label><input type="text" id="lot_sylob" list="lots"></div>
+      <div><label for="lot_fournisseur">Lot fournisseur</label><input type="text" id="lot_fournisseur"></div>
+      <div><label for="fournisseur">Fournisseur</label><input type="text" id="fournisseur"></div>
+    </div>
+    <datalist id="lots"></datalist>
+    <ul class="sources" id="sources"></ul>
+    <p style="margin:16px 0 0">
+      <button id="btn-generer" type="button">Générer la fiche (Entrée)</button>
+      <button id="btn-annuler" type="button" class="second">Annuler (Échap)</button>
+    </p>
+  </section>
+
+  <section class="carte">
+    <strong>Packing Lists</strong>
+    <p style="margin:8px 0">
+      <input type="file" id="fichier-pl" accept="application/pdf">
+      <button id="btn-recharger" type="button" class="second">Relire le dossier</button>
+    </p>
+    <ul id="liste-pl" style="font-size:13px"></ul>
+  </section>
+
+  <section class="carte"><strong>Fiches de la session</strong><ul id="journal"></ul></section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let courant = null;
+
+function pastille(id, ok, titre) {
+  const el = $(id); el.className = "pastille " + (ok ? "ok" : "ko"); el.title = titre || "";
+}
+function message(cible, texte, genre) {
+  $(cible).innerHTML = ""; if (!texte) return;
+  const div = document.createElement("div"); div.className = "msg " + genre; div.textContent = texte;
+  $(cible).appendChild(div);
+}
+function refocus() { $("code").value = ""; $("code").focus(); }
+
+function afficherPackingLists(rapports) {
+  const ul = $("liste-pl"); ul.innerHTML = "";
+  rapports.forEach((r) => {
+    const li = document.createElement("li");
+    li.textContent = r.fichier + " : " + r.statut + " (" + r.n_articles + " article(s))" + (r.detail ? " " + r.detail : "");
+    if (r.statut !== "OK") li.style.color = "var(--ko)";
+    ul.appendChild(li);
+  });
+  const ko = rapports.filter((r) => r.statut !== "OK").length;
+  pastille("p-pl", ko === 0, ko + " en échec");
+  $("p-pl").textContent = "Packing Lists : " + rapports.length;
+}
+
+async function chargerEtat() {
+  try {
+    const r = await fetch("api/etat"); const e = await r.json();
+    pastille("p-sylob", e.sylob, "API Sylob temps réel");
+    pastille("p-dwh", e.dwh, e.dwh_detail);
+    pastille("p-depot", e.depot, e.depot_detail);
+    $("operateur").textContent = e.operateur;
+    afficherPackingLists(e.packing_lists);
+  } catch (err) { message("message-scan", "Application injoignable.", "ko"); }
+}
+
+function afficherProposition(p) {
+  courant = p;
+  $("proposition").classList.remove("masque");
+  $("titre-article").textContent = (p.article.ref || p.code) + " : " + (p.article.designation || "");
+  $("infos-article").textContent = "Code " + p.code + " · " + (p.resolution || "") + " · source " + (p.article.source || "-");
+  $("alertes").innerHTML = "";
+  if (p.message && !p.fiable) message("alertes", p.message, "alerte");
+  p.alertes.forEach((a) => { const d = document.createElement("div"); d.className = "msg alerte"; d.textContent = a; $("alertes").appendChild(d); });
+  $("bloc-confirmation").classList.toggle("masque", p.fiable);
+  $("confirme").checked = false;
+  ["po", "lot_sylob", "lot_fournisseur", "fournisseur"].forEach((c) => { $(c).value = p[c] || ""; });
+  $("lots").innerHTML = p.lots_connus.map((l) => "<option>").join("");
+  [...$("lots").options].forEach((o, i) => { o.value = p.lots_connus[i]; });
+  afficherCandidats(p);
+  $("sources").innerHTML = "";
+  p.sources.forEach((s) => { const li = document.createElement("li"); li.textContent = s; $("sources").appendChild(li); });
+}
+
+function afficherCandidats(p) {
+  const bloc = $("candidats"); bloc.innerHTML = "";
+  $("bloc-candidats").classList.toggle("masque", !p.po_ambigu);
+  if (!p.po_ambigu) return;
+  p.candidats_po.forEach((c) => {
+    const lab = document.createElement("label"); lab.className = "candidat";
+    const radio = document.createElement("input"); radio.type = "radio"; radio.name = "candidat";
+    radio.addEventListener("change", async () => {
+      $("po").value = c.numero; $("fournisseur").value = c.fournisseur;
+      const r = await fetch("api/lot?code=" + encodeURIComponent(p.code) + "&po=" + encodeURIComponent(c.numero));
+      if (r.ok) { const l = await r.json(); if (l.lot) $("lot_sylob").value = l.lot; }
+      refocusGenerer();
+    });
+    lab.appendChild(radio);
+    lab.appendChild(document.createTextNode("PO " + c.numero + " · " + c.fournisseur + " · " + Math.round(c.quantite) + " pce · réception " + c.etat_reception));
+    bloc.appendChild(lab);
+  });
+}
+function refocusGenerer() { $("btn-generer").focus(); }
+
+async function scanner(code) {
+  message("message-scan", "Recherche de " + code + "...", "alerte");
+  const r = await fetch("api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+  const p = await r.json();
+  if (!r.ok) { message("message-scan", "Erreur : " + (p.detail || r.status), "ko"); return refocus(); }
+  if (!p.trouve) { message("message-scan", p.message || "Code inconnu.", "ko"); $("proposition").classList.add("masque"); return refocus(); }
+  message("message-scan", "", "");
+  afficherProposition(p);
+  if (!p.fiable) $("confirme").focus(); else refocusGenerer();
+}
+
+async function generer() {
+  if (!courant) return;
+  if (!courant.fiable && !$("confirme").checked) { message("alertes", "Confirmer l'article avant de générer la fiche.", "ko"); return; }
+  const corps = { code: courant.code, confirme: $("confirme").checked };
+  ["po", "lot_sylob", "lot_fournisseur", "fournisseur"].forEach((c) => { corps[c] = $(c).value.trim(); });
+  $("btn-generer").disabled = true;
+  try {
+    const r = await fetch("api/fiches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+    if (!r.ok) { const e = await r.json(); message("message-scan", e.detail || ("Erreur " + r.status), "ko"); return; }
+    const nom = decodeURIComponent(r.headers.get("X-Fiche-Nom") || "fiche.xlsx");
+    const ou = decodeURIComponent(r.headers.get("X-Fiche-Emplacement") || "");
+    const lien = document.createElement("a"); lien.href = URL.createObjectURL(await r.blob()); lien.download = nom; lien.textContent = nom;
+    const li = document.createElement("li"); li.appendChild(lien); li.appendChild(document.createTextNode(" · déposée : " + ou));
+    $("journal").prepend(li);
+    message("message-scan", "Fiche " + nom + " déposée dans le dossier qualité.", "ok");
+    annuler();
+  } finally { $("btn-generer").disabled = false; }
+}
+function annuler() { courant = null; $("proposition").classList.add("masque"); refocus(); }
+
+$("form-scan").addEventListener("submit", (ev) => { ev.preventDefault(); const c = $("code").value.trim(); if (c) scanner(c); });
+$("btn-generer").addEventListener("click", generer);
+$("btn-annuler").addEventListener("click", annuler);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") annuler();
+  if (ev.key === "Enter" && courant && document.activeElement !== $("code") && document.activeElement.tagName !== "BUTTON") { ev.preventDefault(); generer(); }
+});
+$("fichier-pl").addEventListener("change", async () => {
+  const f = $("fichier-pl").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("fichier", f);
+  const r = await fetch("api/packing-lists", { method: "POST", body: fd });
+  const e = await r.json();
+  message("message-scan", r.ok ? "Packing List déposée : " + e.emplacement : (e.detail || "Dépôt refusé."), r.ok ? "ok" : "ko");
+  $("fichier-pl").value = ""; chargerEtat(); refocus();
+});
+$("btn-recharger").addEventListener("click", async () => {
+  const r = await fetch("api/packing-lists/recharger", { method: "POST" });
+  afficherPackingLists((await r.json()).packing_lists); refocus();
+});
+chargerEtat();
+</script>
+</body>
+</html>

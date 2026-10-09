@@ -17,3 +17,16 @@ azure-keyvault-secrets>=4.8.0
 # livres dans tools/ par scripts/preparer_ocr_portable.ps1.
 pytesseract>=0.3.10
 pdf2image>=1.17.0
+
+# DWH Azure (dwh_repository)
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Application web (Web App Azure, decision du 09/10/2026)
+fastapi>=0.115.0
+uvicorn>=0.30.0
+gunicorn>=22.0.0; sys_platform != "win32"
+python-multipart>=0.0.9
+
+# Depot des fiches sur SRV-FILES-POM (SMB, compte de service svc-fichectrl)
+smbprotocol>=1.13.0

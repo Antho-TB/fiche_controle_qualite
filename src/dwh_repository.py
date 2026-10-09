@@ -37,6 +37,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+from src.config import Config
+
 logger = logging.getLogger(__name__)
 
 # Le controle reception import porte sur PLUSIEURS societes : les articles finis
@@ -45,11 +47,6 @@ logger = logging.getLogger(__name__)
 # fige sur SE). L ordre ci-dessous n exclut rien, il sert seulement a departager
 # un code present dans plusieurs societes.
 SOCIETES_PREFEREES: tuple[str, ...] = ("SE", "GDD", "CIE")
-_VAULT_URL = "https://kv-dtpf-prod.vault.azure.net/"
-_SECRET_LOGIN = "psql-prod-sylob-anthony-bezille-login"
-_SECRET_MOT_DE_PASSE = "psql-prod-sylob-anthony-bezille-password"
-_HOTE = "psql-dtpf-psql-prod.postgres.database.azure.com"
-_BASE = "dtpf_sylob_prod"
 _DELAI_CONNEXION = 8  # secondes, au dela le poste reception travaille sans DWH
 
 
@@ -129,9 +126,9 @@ class DWHRepository:
             drivername="postgresql+psycopg2",
             username=login,
             password=mot_de_passe,
-            host=_HOTE,
+            host=Config.PG_HOTE,
             port=5432,
-            database=_BASE,
+            database=Config.PG_BASE,
             query={"sslmode": "require",
                    "connect_timeout": str(_DELAI_CONNEXION)},
         )
@@ -146,7 +143,7 @@ class DWHRepository:
             return
         self.disponible = True
         logger.info("[SUCCES] DWH %s joignable (societes %s).",
-                    _BASE, ", ".join(self.societes))
+                    Config.PG_BASE, ", ".join(self.societes))
 
     def _lire_identifiants(self) -> Optional[tuple[str, str]]:
         """Lit login et mot de passe PostgreSQL dans Key Vault, sans les journaliser."""
@@ -156,9 +153,9 @@ class DWHRepository:
             credential = obtenir_credential()
             if credential is None:
                 return None
-            kv = SecretClient(vault_url=_VAULT_URL, credential=credential)
-            return (kv.get_secret(_SECRET_LOGIN).value,
-                    kv.get_secret(_SECRET_MOT_DE_PASSE).value)
+            kv = SecretClient(vault_url=Config.KEY_VAULT_URL, credential=credential)
+            return (kv.get_secret(Config.PG_SECRET_LOGIN).value,
+                    kv.get_secret(Config.PG_SECRET_PASSWORD).value)
         except Exception as e:
             logger.warning("[ATTENTION] Key Vault DWH illisible : %s", e)
             return None

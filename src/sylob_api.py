@@ -17,8 +17,29 @@ import urllib3
 import xml.etree.ElementTree as ET
 from typing import Optional
 
+from urllib.parse import urlsplit, urlunsplit
+
+from src.config import Config
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
+
+
+def forcer_hote(url: str, hote: str) -> str:
+    """
+    Remplace l'hote d'une URL en conservant schema, port, chemin et requete.
+
+    Junior Tip : l'URL du secret designe srv-erp, nom que le DNS de la Web App
+    Azure ne resout pas. On substitue l'IP plutot que de dupliquer l'URL
+    complete dans un second secret qui finirait par diverger du premier. La
+    verification TLS est deja desactivee pour Sylob (certificat interne), le
+    changement de nom ne casse donc rien.
+    """
+    if not url or not hote:
+        return url
+    morceaux = urlsplit(url)
+    port = ":%d" % morceaux.port if morceaux.port else ""
+    return urlunsplit(morceaux._replace(netloc=hote + port))
 
 
 def get_base_path() -> str:
@@ -34,8 +55,6 @@ class SylobAPI:
     # Source de verite unique des credentials Sylob applicatifs : un secret
     # unique dans kv-dtpf-prod, partage avec MyReport et tout futur connecteur.
     # Un nom de secret Key Vault n accepte pas d underscore, d ou les tirets.
-    _VAULT_URL = "https://kv-dtpf-prod.vault.azure.net/"
-    _SECRET_CLIENT = "tb-sylob-client"
     # Repli sur l ancien emplacement, un secret par variable, le temps que tous
     # les postes soient passes sur le secret unique.
     _VAULT_URL_LEGACY = "https://kv-tb-ia-agents-secrets.vault.azure.net/"
@@ -67,16 +86,17 @@ class SylobAPI:
         un poste dont l authentification Azure serait tombee.
         """
         if self._load_from_keyvault():
-            self.source_credentials = "Key Vault (tb-sylob-client)"
+            self.source_credentials = "Key Vault (%s)" % Config.SYLOB_SECRET
         elif self._load_from_keyvault_legacy():
             self.source_credentials = "Key Vault (secrets unitaires)"
             logger.warning("[ATTENTION] Credentials lus dans l ancien Key Vault. "
-                           "Migrer vers %s.", self._SECRET_CLIENT)
+                           "Migrer vers %s.", Config.SYLOB_SECRET)
         else:
             self._load_from_env()
             self.source_credentials = ".env local"
             logger.warning("[ATTENTION] Credentials lus dans le .env local. "
                            "Ce fichier ne doit pas rester sur un partage reseau.")
+        self.base_url1 = forcer_hote(self.base_url1, Config.SYLOB_HOTE)
         self.headers = self._build_headers()
 
     def _load_from_keyvault(self) -> bool:
@@ -92,25 +112,25 @@ class SylobAPI:
             credential = obtenir_credential()
             if credential is None:
                 return False
-            kv = SecretClient(vault_url=self._VAULT_URL, credential=credential)
-            charge = json.loads(kv.get_secret(self._SECRET_CLIENT).value)
+            kv = SecretClient(vault_url=Config.KEY_VAULT_URL, credential=credential)
+            charge = json.loads(kv.get_secret(Config.SYLOB_SECRET).value)
         except ImportError as e:
             logger.error("[ECHEC] Packages Azure absents (%s). Installer "
                          "azure-identity et azure-keyvault-secrets.", e)
             return False
         except Exception as e:
             logger.warning("[ATTENTION] Secret %s illisible : %s",
-                           self._SECRET_CLIENT, e)
+                           Config.SYLOB_SECRET, e)
             return False
         manquants = [c for c in self._CHAMPS if not charge.get(c)]
         if manquants:
             logger.error("[ECHEC] Secret %s incomplet, champs manquants : %s",
-                         self._SECRET_CLIENT, ", ".join(manquants))
+                         Config.SYLOB_SECRET, ", ".join(manquants))
             return False
         for champ in self._CHAMPS:
             setattr(self, champ, charge[champ])
         logger.info("[SUCCES] Credentials Sylob charges depuis %s.",
-                    self._SECRET_CLIENT)
+                    Config.SYLOB_SECRET)
         return True
 
     def _load_from_keyvault_legacy(self) -> bool:
