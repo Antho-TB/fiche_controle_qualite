@@ -28,15 +28,15 @@ def afficher_status_board(
 ) -> None:
     """Affiche l'état des services au démarrage."""
     print("\n" + "=" * 52)
-    print("      INTERFACE AUTOMATISÉE — SERVICE QUALITÉ")
+    print("      INTERFACE AUTOMATISÉE : SERVICE QUALITÉ")
     print("=" * 52)
 
     sylob_ok = loader.sylob.is_healthy()
     csv_count = loader.get_article_count()
     adi_ok = pdf_data.adi_available
 
-    sylob_label = "CONNECTÉ ✓" if sylob_ok else "HORS LIGNE — mode dégradé"
-    adi_label = "ACTIF ✓" if adi_ok else "INDISPONIBLE — fallback PyPDF"
+    sylob_label = "CONNECTÉ ✓" if sylob_ok else "HORS LIGNE : mode dégradé"
+    adi_label = "ACTIF ✓" if adi_ok else "INDISPONIBLE : fallback PyPDF"
     csv_label = f"CHARGÉ ✓ ({csv_count} articles)" if csv_count > 0 else "ABSENT"
 
     print(f"\n  [Sylob]   {sylob_label}")
@@ -47,7 +47,7 @@ def afficher_status_board(
     total = sum(resume.values())
     if total:
         print(f"  [PL]      {resume['OK']} exploitable(s) / {total} "
-              f"— {resume['ECHEC'] + resume['ERREUR']} en echec")
+              f"- {resume['ECHEC'] + resume['ERREUR']} en echec")
         for rapport in pdf_data.rapports:
             if rapport["statut"] in ("ECHEC", "ERREUR"):
                 print(f"            [!] {rapport['fichier']} : {rapport['detail']}")
@@ -195,12 +195,12 @@ def _traiter_article_inconnu(
     Si Sylob est connecté, tente un appel EAN pour les nouveaux produits.
     """
     if not loader.sylob.is_healthy():
-        print(f"[!] Code '{code_scanne}' inconnu du CSV. Sylob hors ligne — impossible de vérifier.")
+        print(f"[!] Code '{code_scanne}' inconnu du CSV. Sylob hors ligne : impossible de vérifier.")
         return
 
     result = loader.enrichir_depuis_sylob(ean=code_scanne)
     if result and (result.get('po') or result.get('lot')):
-        print(f"     [Sylob] Nouveau produit détecté — CMD={result.get('po')} LOT={result.get('lot')}")
+        print(f"     [Sylob] Nouveau produit détecté : CMD={result.get('po')} LOT={result.get('lot')}")
         article_minimal = {
             'ean': code_scanne, 'ref': code_scanne, 'designation': f'Article EAN {code_scanne}',
             'po': result.get('po', ''), 'lot': result.get('lot', ''), 'fournisseur': '',
@@ -231,7 +231,7 @@ def _confirmer_resolution(article: dict, code_scanne: str) -> bool:
                   f"{article.get('designation', '')}")
         return True
     print(f"     [ATTENTION] {article.get('_message_resolution', '')}")
-    print(f"     Article propose : {article.get('ref', '')} — "
+    print(f"     Article propose : {article.get('ref', '')} : "
           f"{article.get('designation', '')}")
     return input("     Confirmer cet article ? (O/N) : ").strip().upper() == "O"
 
@@ -313,7 +313,7 @@ def lancer_session_scan() -> None:
             if chemin_fiche:
                 print(f"[SUCCÈS] Fiche créée : {chemin_fiche}")
             else:
-                print("[ERREUR] Impossible de sauvegarder — vérifiez que le fichier n'est pas ouvert.")
+                print("[ERREUR] Impossible de sauvegarder : vérifiez que le fichier n'est pas ouvert.")
 
             print()
             choix_arch = input(

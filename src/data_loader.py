@@ -66,7 +66,7 @@ from src.dwh_repository import DWHRepository  # noqa: E402
 
 
 class DataLoader:
-    """Référentiel maître des articles — lookup CSV + enrichissement Sylob."""
+    """Référentiel maître des articles : lookup CSV + enrichissement Sylob."""
 
     def __init__(self, csv_path: Optional[str] = None,
                  avec_dwh: bool = True) -> None:

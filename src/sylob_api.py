@@ -179,7 +179,7 @@ class SylobAPI:
             self.headers = self._build_headers()
             logger.info("[Sylob] Credentials rafraîchis depuis Key Vault.")
         else:
-            logger.error("[Sylob] Refresh impossible — Key Vault inaccessible.")
+            logger.error("[Sylob] Refresh impossible : Key Vault inaccessible.")
 
     # ------------------------------------------------------------------
     # Health-check
@@ -258,7 +258,7 @@ class SylobAPI:
             self._refresh_credentials()
             result = self._call_api(params)
             if result == "401":
-                logger.error("[Sylob] 401 persistant après refresh — session inutilisable.")
+                logger.error("[Sylob] 401 persistant après refresh : session inutilisable.")
                 return None
 
         return result if isinstance(result, dict) else None
@@ -299,7 +299,7 @@ class SylobAPI:
             return result if result else None
 
         except requests.exceptions.Timeout:
-            logger.warning("[Sylob] Timeout — fallback données PDF/CSV.")
+            logger.warning("[Sylob] Timeout : fallback données PDF/CSV.")
             return None
         except requests.exceptions.RequestException as e:
             logger.warning(f"[Sylob] Erreur réseau : {e}")
