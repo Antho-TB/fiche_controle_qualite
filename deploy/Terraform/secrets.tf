@@ -1,3 +1,12 @@
+# =============================================================================
+# MODULE NON RETENU, NE PAS APPLIQUER (annote le 09/10/2026)
+# =============================================================================
+# Cible l'ancien coffre kv-tb-ia-agents-secrets (secrets unitaires SYLOB-*).
+# Remplace par le secret JSON tb-sylob-client dans kv-dtpf-prod (commit 27b4b0b).
+# L'hebergement Azure de l'application est dans deploy/webapp/.
+# Conserve comme documentation du repli legacy lu par sylob_api.
+# =============================================================================
+
 # Injection des secrets de l'API Sylob vers Key Vault Centralisé
 
 data "azurerm_key_vault" "central_kv" {

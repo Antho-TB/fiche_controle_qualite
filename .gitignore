@@ -49,3 +49,9 @@ tools/
 
 # Cache OCR local
 .cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
