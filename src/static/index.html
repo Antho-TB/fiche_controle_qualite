@@ -4,101 +4,249 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Contrôle réception</title>
+<link rel="icon" type="image/svg+xml" href="static/tb_tile_red.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-  :root { --fond:#f6f7f9; --carte:#fff; --texte:#1d2430; --doux:#5b6574; --bord:#d9dee5;
-          --ok:#1f7a3f; --ko:#b42318; --alerte:#9a6700; --accent:#1f5fbf; }
+  /* TB Design System, couche corporate (Groupe Tarrerias-Bonjean), valeurs
+     reprises de tokens.json. Monochrome, angles vifs, elevation par filet. */
+  :root {
+    --tb-black:#000000; --tb-ink-800:#1c1c1c; --tb-ink-700:#333333; --tb-ink-600:#595959;
+    --tb-grey-200:#e0e0e0; --tb-grey-150:#e9e9e9; --tb-grey-100:#f0f0f0; --tb-grey-50:#f7f7f7;
+    --tb-white:#ffffff; --tb-red:#e2001a; --tb-blue:#1b0bb5;
+    --text-strong:var(--tb-black); --text-body:var(--tb-ink-800); --text-muted:var(--tb-ink-600);
+    --text-inverse:var(--tb-white);
+    --surface-page:var(--tb-white); --surface-subtle:var(--tb-grey-100);
+    --surface-sunken:var(--tb-grey-50); --surface-card:var(--tb-white);
+    --border-strong:var(--tb-black); --border-default:var(--tb-grey-200); --border-subtle:var(--tb-grey-150);
+    --status-success:#1f8a4c; --status-warning:#c77700; --status-danger:var(--tb-red);
+    --focus-ring:var(--tb-blue);
+    --font-display:"Archivo","Trade Gothic LT Std","Arial Narrow",sans-serif;
+    --font-body:"Roboto","Helvetica Neue",Arial,sans-serif;
+    --font-mono:"Roboto Mono",ui-monospace,"SFMono-Regular",monospace;
+    --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem;
+    --space-6:2rem; --space-8:3rem;
+    --bw-hairline:1px; --bw-regular:1.5px; --bw-bold:2px;
+    --container-md:960px; --gutter:1.5rem; --header-height:72px;
+    --shadow-md:0 4px 14px rgba(0,0,0,.08);
+    --ease-standard:cubic-bezier(.2,0,0,1); --dur-fast:120ms; --dur-base:200ms;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.45 system-ui,"Segoe UI",sans-serif; background:var(--fond); color:var(--texte); }
-  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:10px 16px;
-           background:var(--carte); border-bottom:1px solid var(--bord); }
-  header h1 { font-size:17px; margin:0 12px 0 0; }
-  .pastille { font-size:13px; padding:2px 8px; border-radius:10px; border:1px solid var(--bord); }
-  .pastille.ok { color:var(--ok); border-color:var(--ok); } .pastille.ko { color:var(--ko); border-color:var(--ko); }
-  #operateur { margin-left:auto; color:var(--doux); font-size:13px; }
-  main { max-width:900px; margin:16px auto; padding:0 16px; }
-  .carte { background:var(--carte); border:1px solid var(--bord); border-radius:8px; padding:16px; margin-bottom:16px; }
-  #code { width:100%; font-size:24px; padding:10px 12px; border:2px solid var(--accent); border-radius:6px; }
-  label { display:block; font-size:13px; color:var(--doux); margin:10px 0 4px; }
-  input[type=text] { width:100%; padding:7px 9px; border:1px solid var(--bord); border-radius:5px; font-size:15px; }
-  .grille { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:0 16px; }
-  button { font-size:15px; padding:9px 16px; border-radius:6px; border:1px solid var(--accent);
-           background:var(--accent); color:#fff; cursor:pointer; }
-  button.second { background:#fff; color:var(--accent); }
-  .msg { padding:8px 10px; border-radius:6px; margin:8px 0; }
-  .msg.ko { background:#fdecea; color:var(--ko); } .msg.ok { background:#e8f5ec; color:var(--ok); }
-  .msg.alerte { background:#fff4d6; color:var(--alerte); }
-  .candidat { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid var(--bord); }
-  ul.sources { margin:6px 0 0; padding-left:18px; color:var(--doux); font-size:13px; }
-  .masque { display:none; }
-  #journal li { font-size:13px; color:var(--doux); }
+  html, body { margin:0; }
+  body { font:400 1rem/1.65 var(--font-body); color:var(--text-body); background:var(--surface-subtle); }
+  h1, h2, h3, h4 { font-family:var(--font-display); font-weight:700; letter-spacing:-.01em;
+                   line-height:1.18; color:var(--text-strong); margin:0; }
+  h1 { font-size:1.375rem; } h2 { font-size:1.375rem; } h3 { font-size:1.125rem; }
+  .overline { font:600 .6875rem/1.5 var(--font-display); letter-spacing:.12em; text-transform:uppercase; }
+  .spec { font:500 .75rem/1.5 var(--font-mono); letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); }
+  .muted { color:var(--text-muted); }
+  :focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+
+  /* En-tete */
+  header { position:sticky; top:0; z-index:100; min-height:var(--header-height); background:var(--surface-page);
+           border-bottom:var(--bw-hairline) solid var(--border-default); }
+  .barre { max-width:var(--container-md); min-height:var(--header-height); margin:0 auto; padding:var(--space-2) var(--gutter);
+           display:flex; align-items:center; gap:var(--space-4); }
+  .barre img { width:40px; height:40px; display:block; }
+  .barre .titre { display:flex; flex-direction:column; white-space:nowrap; }
+  .barre .titre .overline { color:var(--text-muted); }
+  .etats { margin-left:auto; display:flex; flex-wrap:wrap; gap:var(--space-2); justify-content:flex-end; }
+
+  /* Badge filaire : un fait, jamais un controle */
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:2px 8px;
+           border:var(--bw-hairline) solid var(--border-default); background:var(--surface-card);
+           font:600 .6875rem/1.5 var(--font-display); letter-spacing:.12em; text-transform:uppercase;
+           color:var(--text-muted); }
+  .badge .point { width:7px; height:7px; background:var(--tb-grey-200); }
+  .badge.ok { color:var(--text-body); } .badge.ok .point { background:var(--status-success); }
+  .badge.ko { color:var(--status-danger); border-color:var(--status-danger); }
+  .badge.ko .point { background:var(--status-danger); }
+
+  main { max-width:var(--container-md); margin:0 auto; padding:var(--space-5) var(--gutter) var(--space-8); }
+  .operateur { margin:0 0 var(--space-4); }
+
+  /* Carte : filet, aucune ombre au repos */
+  .carte { background:var(--surface-card); border:var(--bw-hairline) solid var(--border-default);
+           padding:var(--space-5); margin-bottom:var(--space-4); }
+  .carte > h2.overline, .carte > .entete { margin:0 0 var(--space-3); }
+  /* Carte d'emphase (motif du cadre) : une seule par vue, la zone de scan */
+  .carte.cadre { border:var(--bw-bold) solid var(--border-strong); }
+
+  label.champ { display:block; }
+  label.champ > span { display:block; margin:0 0 var(--space-1); color:var(--text-strong); }
+  input[type=text], #code { width:100%; font:400 1rem/1.5 var(--font-body); color:var(--text-body);
+           background:var(--surface-card); border:var(--bw-regular) solid var(--border-default);
+           border-radius:0; padding:10px 12px; transition:border-color var(--dur-fast) var(--ease-standard); }
+  input[type=text]:hover { border-color:var(--tb-ink-600); }
+  input[type=text]:focus, #code:focus { border-color:var(--border-strong); outline:2px solid var(--focus-ring); outline-offset:2px; }
+  #code { font:500 1.75rem/1.3 var(--font-mono); letter-spacing:.04em; border-color:var(--border-strong); padding:14px 16px; }
+
+  .grille { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:var(--space-4); }
+
+  /* Boutons : angles vifs, libelle en capitales dans la grotesque */
+  .bouton { display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2);
+            min-height:44px; padding:0 var(--space-5); border:var(--bw-regular) solid var(--border-strong);
+            border-radius:0; cursor:pointer; font:600 .8125rem/1 var(--font-display); letter-spacing:.12em;
+            text-transform:uppercase; transition:background var(--dur-fast) var(--ease-standard),
+            color var(--dur-fast) var(--ease-standard); }
+  .bouton:active { transform:translateY(1px); }
+  .bouton[disabled] { opacity:.5; cursor:progress; }
+  .bouton.primaire { background:var(--tb-black); color:var(--text-inverse); }
+  .bouton.primaire:hover { background:var(--tb-ink-700); border-color:var(--tb-ink-700); }
+  .bouton.secondaire { background:var(--surface-card); color:var(--text-strong); }
+  .bouton.secondaire:hover { background:var(--tb-black); color:var(--text-inverse); }
+  .bouton.fantome { background:transparent; color:var(--text-strong); border-color:transparent; }
+  .bouton.fantome:hover { background:var(--tb-grey-100); }
+  .actions { display:flex; flex-wrap:wrap; gap:var(--space-3); margin-top:var(--space-5); }
+
+  /* Messages : filet et pictogramme, jamais d'aplat rouge */
+  .msg { display:flex; gap:var(--space-2); align-items:flex-start; padding:var(--space-3) var(--space-4);
+         margin-top:var(--space-3); border:var(--bw-hairline) solid var(--border-default);
+         background:var(--surface-card); color:var(--text-body); }
+  .msg svg { flex:none; width:18px; height:18px; margin-top:3px; }
+  .msg.ko { border-color:var(--status-danger); color:var(--status-danger); }
+  .msg.ok svg { color:var(--status-success); }
+  .msg.alerte { border-color:var(--status-warning); } .msg.alerte svg { color:var(--status-warning); }
+  .msg.info svg { color:var(--tb-blue); }
+
+  /* Proposition : bloc de donnees ouvert par un filet superieur de 2 px */
+  .article { border-top:var(--bw-bold) solid var(--border-strong); padding-top:var(--space-4); margin-bottom:var(--space-4); }
+  .article h2 { margin:var(--space-1) 0; }
+  .candidats { border-top:var(--bw-hairline) solid var(--border-default); margin:var(--space-2) 0 var(--space-4); }
+  .candidat { display:flex; gap:var(--space-3); align-items:center; padding:var(--space-3) var(--space-2);
+              border-bottom:var(--bw-hairline) solid var(--border-default); cursor:pointer; }
+  .candidat:hover { background:var(--tb-grey-100); }
+  .candidat input { accent-color:var(--tb-black); width:18px; height:18px; margin:0; }
+  .candidat .spec { color:var(--text-strong); }
+  .confirmation { display:flex; gap:var(--space-3); align-items:center; padding:var(--space-3) 0; cursor:pointer; }
+  .confirmation input { accent-color:var(--tb-black); width:18px; height:18px; margin:0; }
+  .sources { margin:var(--space-4) 0 0; padding:var(--space-3) var(--space-4); background:var(--surface-sunken);
+             list-style:none; border-top:var(--bw-hairline) solid var(--border-default); }
+  .sources li { font-size:.875rem; color:var(--text-muted); }
+  .sources li::before { content:"· "; }
+
+  .liste { list-style:none; margin:0; padding:0; }
+  .liste li { display:flex; flex-wrap:wrap; gap:var(--space-2); align-items:baseline; padding:var(--space-2) 0;
+              border-bottom:var(--bw-hairline) solid var(--border-subtle); font-size:.875rem; }
+  .liste li:last-child { border-bottom:0; }
+  .liste a { color:var(--text-strong); font-weight:500; text-underline-offset:3px; }
+  .liste .ko { color:var(--status-danger); }
+  .vide { font-size:.875rem; color:var(--text-muted); margin:0; }
+  .depot { display:flex; flex-wrap:wrap; gap:var(--space-3); align-items:center; margin-bottom:var(--space-3); }
+  .depot input[type=file] { font:400 .875rem var(--font-body); }
+
+  footer { max-width:var(--container-md); margin:0 auto; padding:0 var(--gutter) var(--space-6); }
+  .masque { display:none !important; }
+  @media (max-width:640px) {
+    .barre { gap:var(--space-3); } .barre .titre .overline { display:none; }
+    .etats { display:none; } #code { font-size:1.375rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } .bouton:active { transform:none; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>Contrôle réception</h1>
-  <span class="pastille" id="p-sylob">Sylob</span>
-  <span class="pastille" id="p-dwh">DWH</span>
-  <span class="pastille" id="p-depot">Dossier qualité</span>
-  <span class="pastille" id="p-pl">Packing Lists</span>
-  <span id="operateur"></span>
+  <div class="barre">
+    <img src="static/tb_black.svg" alt="Groupe Tarrerias-Bonjean">
+    <div class="titre">
+      <span class="overline">Qualité · Réception</span>
+      <h1>Contrôle réception</h1>
+    </div>
+    <div class="etats" aria-label="État des sources">
+      <span class="badge" id="p-sylob"><span class="point"></span>Sylob</span>
+      <span class="badge" id="p-dwh"><span class="point"></span>DWH</span>
+      <span class="badge" id="p-depot"><span class="point"></span>Dossier qualité</span>
+      <span class="badge" id="p-pl"><span class="point"></span>Packing Lists</span>
+    </div>
+  </div>
 </header>
+
 <main>
-  <section class="carte">
+  <p class="operateur spec" id="operateur"></p>
+
+  <section class="carte cadre">
     <form id="form-scan" autocomplete="off">
-      <label for="code">Scanner un code article (EAN13, EAN14 carton ou référence)</label>
-      <input id="code" name="code" autofocus maxlength="64" inputmode="numeric">
+      <label class="champ" for="code"><span class="overline">Scanner un article</span></label>
+      <input id="code" name="code" autofocus maxlength="64" inputmode="numeric"
+             aria-describedby="aide-code">
+      <p id="aide-code" class="muted" style="font-size:.875rem;margin:var(--space-2) 0 0">
+        EAN13 unité, EAN14 carton ou référence article. Entrée pour valider.</p>
     </form>
-    <div id="message-scan"></div>
+    <div id="message-scan" aria-live="polite"></div>
   </section>
 
-  <section class="carte masque" id="proposition">
-    <h2 id="titre-article" style="margin:0 0 4px;font-size:18px"></h2>
-    <div id="infos-article" style="color:var(--doux);font-size:13px"></div>
-    <div id="alertes"></div>
-    <div id="bloc-confirmation" class="masque">
-      <label><input type="checkbox" id="confirme"> Je confirme que c'est bien cet article</label>
+  <section class="carte masque" id="proposition" aria-live="polite">
+    <div class="article">
+      <span class="spec" id="infos-article"></span>
+      <h2 id="titre-article"></h2>
     </div>
+    <div id="alertes"></div>
+    <label id="bloc-confirmation" class="confirmation masque">
+      <input type="checkbox" id="confirme"> <span>Je confirme qu'il s'agit bien de cet article</span>
+    </label>
     <div id="bloc-candidats" class="masque">
-      <label>Plusieurs commandes portent cet article : choisir celle du colis</label>
-      <div id="candidats"></div>
+      <span class="overline" style="color:var(--text-strong)">Plusieurs commandes portent cet article : choisir celle du colis</span>
+      <div class="candidats" id="candidats" role="radiogroup"></div>
     </div>
     <div class="grille">
-      <div><label for="po">N° de commande (PO)</label><input type="text" id="po"></div>
-      <div><label for="lot_sylob">Lot Sylob</label><input type="text" id="lot_sylob" list="lots"></div>
-      <div><label for="lot_fournisseur">Lot fournisseur</label><input type="text" id="lot_fournisseur"></div>
-      <div><label for="fournisseur">Fournisseur</label><input type="text" id="fournisseur"></div>
+      <label class="champ"><span class="overline">N° de commande (PO)</span><input type="text" id="po"></label>
+      <label class="champ"><span class="overline">Lot Sylob</span><input type="text" id="lot_sylob" list="lots"></label>
+      <label class="champ"><span class="overline">Lot fournisseur</span><input type="text" id="lot_fournisseur"></label>
+      <label class="champ"><span class="overline">Fournisseur</span><input type="text" id="fournisseur"></label>
     </div>
     <datalist id="lots"></datalist>
-    <ul class="sources" id="sources"></ul>
-    <p style="margin:16px 0 0">
-      <button id="btn-generer" type="button">Générer la fiche (Entrée)</button>
-      <button id="btn-annuler" type="button" class="second">Annuler (Échap)</button>
-    </p>
+    <ul class="sources" id="sources" aria-label="Origine des valeurs"></ul>
+    <div class="actions">
+      <button id="btn-generer" type="button" class="bouton primaire">Générer la fiche</button>
+      <button id="btn-annuler" type="button" class="bouton fantome">Annuler</button>
+    </div>
   </section>
 
   <section class="carte">
-    <strong>Packing Lists</strong>
-    <p style="margin:8px 0">
-      <input type="file" id="fichier-pl" accept="application/pdf">
-      <button id="btn-recharger" type="button" class="second">Relire le dossier</button>
-    </p>
-    <ul id="liste-pl" style="font-size:13px"></ul>
+    <h2 class="overline">Fiches de la session</h2>
+    <p class="vide" id="journal-vide">Aucune fiche générée pour l'instant.</p>
+    <ul class="liste" id="journal"></ul>
   </section>
 
-  <section class="carte"><strong>Fiches de la session</strong><ul id="journal"></ul></section>
+  <section class="carte">
+    <h2 class="overline">Packing Lists</h2>
+    <div class="depot">
+      <input type="file" id="fichier-pl" accept="application/pdf" aria-label="Déposer une Packing List (PDF)">
+      <button id="btn-recharger" type="button" class="bouton secondaire">Relire le dossier</button>
+    </div>
+    <ul class="liste" id="liste-pl"></ul>
+  </section>
 </main>
+<footer><span class="spec">Groupe Tarrerias-Bonjean · Service qualité</span></footer>
+
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+const ICONES = {
+  ok: '<path d="M4 12.5l5 5L20 6.5"/>',
+  ko: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+  alerte: '<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.5v.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/>',
+};
 let courant = null;
 
-function pastille(id, ok, titre) {
-  const el = $(id); el.className = "pastille " + (ok ? "ok" : "ko"); el.title = titre || "";
+function badge(id, etat, libelle, titre) {
+  const el = $(id);
+  el.className = "badge " + (etat ? "ok" : "ko");
+  el.title = titre || "";
+  el.lastChild.textContent = libelle + (etat ? "" : " · hors ligne");
+}
+function blocMessage(texte, genre) {
+  const div = document.createElement("div");
+  div.className = "msg " + genre;
+  div.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONES[genre] + "</svg>";
+  const span = document.createElement("span"); span.textContent = texte; div.appendChild(span);
+  return div;
 }
 function message(cible, texte, genre) {
-  $(cible).innerHTML = ""; if (!texte) return;
-  const div = document.createElement("div"); div.className = "msg " + genre; div.textContent = texte;
-  $(cible).appendChild(div);
+  $(cible).innerHTML = "";
+  if (texte) $(cible).appendChild(blocMessage(texte, genre));
 }
 function refocus() { $("code").value = ""; $("code").focus(); }
 
@@ -106,42 +254,45 @@ function afficherPackingLists(rapports) {
   const ul = $("liste-pl"); ul.innerHTML = "";
   rapports.forEach((r) => {
     const li = document.createElement("li");
-    li.textContent = r.fichier + " : " + r.statut + " (" + r.n_articles + " article(s))" + (r.detail ? " " + r.detail : "");
-    if (r.statut !== "OK") li.style.color = "var(--ko)";
-    ul.appendChild(li);
+    const nom = document.createElement("span"); nom.textContent = r.fichier;
+    const etat = document.createElement("span"); etat.className = "spec" + (r.statut === "OK" ? "" : " ko");
+    etat.textContent = r.statut + " · " + r.n_articles + " article(s)" + (r.detail ? " · " + r.detail : "");
+    li.append(nom, etat); ul.appendChild(li);
   });
+  if (!rapports.length) ul.innerHTML = '<li class="muted">Aucune Packing List dans le dossier.</li>';
   const ko = rapports.filter((r) => r.statut !== "OK").length;
-  pastille("p-pl", ko === 0, ko + " en échec");
-  $("p-pl").textContent = "Packing Lists : " + rapports.length;
+  badge("p-pl", ko === 0, "Packing Lists " + rapports.length, ko + " en échec");
 }
 
 async function chargerEtat() {
   try {
-    const r = await fetch("api/etat"); const e = await r.json();
-    pastille("p-sylob", e.sylob, "API Sylob temps réel");
-    pastille("p-dwh", e.dwh, e.dwh_detail);
-    pastille("p-depot", e.depot, e.depot_detail);
-    $("operateur").textContent = e.operateur;
+    const e = await (await fetch("api/etat")).json();
+    badge("p-sylob", e.sylob, "Sylob", "API Sylob temps réel");
+    badge("p-dwh", e.dwh, "DWH", e.dwh_detail);
+    badge("p-depot", e.depot, "Dossier qualité", e.depot_detail);
+    $("operateur").textContent = "Opérateur · " + e.operateur;
     afficherPackingLists(e.packing_lists);
-  } catch (err) { message("message-scan", "Application injoignable.", "ko"); }
+  } catch (err) { message("message-scan", "Application injoignable. Vérifier la connexion.", "ko"); }
 }
 
 function afficherProposition(p) {
   courant = p;
   $("proposition").classList.remove("masque");
-  $("titre-article").textContent = (p.article.ref || p.code) + " : " + (p.article.designation || "");
-  $("infos-article").textContent = "Code " + p.code + " · " + (p.resolution || "") + " · source " + (p.article.source || "-");
+  $("titre-article").textContent = p.article.designation || p.code;
+  $("infos-article").textContent = ["Réf. " + (p.article.ref || "-"), p.resolution || "", "Code " + p.code,
+                                    p.article.source || ""].filter(Boolean).join(" · ");
   $("alertes").innerHTML = "";
-  if (p.message && !p.fiable) message("alertes", p.message, "alerte");
-  p.alertes.forEach((a) => { const d = document.createElement("div"); d.className = "msg alerte"; d.textContent = a; $("alertes").appendChild(d); });
+  if (p.message && !p.fiable) $("alertes").appendChild(blocMessage(p.message, "alerte"));
+  p.alertes.forEach((a) => $("alertes").appendChild(blocMessage(a, "alerte")));
   $("bloc-confirmation").classList.toggle("masque", p.fiable);
   $("confirme").checked = false;
   ["po", "lot_sylob", "lot_fournisseur", "fournisseur"].forEach((c) => { $(c).value = p[c] || ""; });
-  $("lots").innerHTML = p.lots_connus.map((l) => "<option>").join("");
-  [...$("lots").options].forEach((o, i) => { o.value = p.lots_connus[i]; });
+  $("lots").innerHTML = "";
+  p.lots_connus.forEach((l) => { const o = document.createElement("option"); o.value = l; $("lots").appendChild(o); });
   afficherCandidats(p);
   $("sources").innerHTML = "";
   p.sources.forEach((s) => { const li = document.createElement("li"); li.textContent = s; $("sources").appendChild(li); });
+  $("sources").classList.toggle("masque", !p.sources.length);
 }
 
 function afficherCandidats(p) {
@@ -155,29 +306,34 @@ function afficherCandidats(p) {
       $("po").value = c.numero; $("fournisseur").value = c.fournisseur;
       const r = await fetch("api/lot?code=" + encodeURIComponent(p.code) + "&po=" + encodeURIComponent(c.numero));
       if (r.ok) { const l = await r.json(); if (l.lot) $("lot_sylob").value = l.lot; }
-      refocusGenerer();
+      $("btn-generer").focus();
     });
-    lab.appendChild(radio);
-    lab.appendChild(document.createTextNode("PO " + c.numero + " · " + c.fournisseur + " · " + Math.round(c.quantite) + " pce · réception " + c.etat_reception));
-    bloc.appendChild(lab);
+    const num = document.createElement("span"); num.className = "spec"; num.textContent = "PO " + c.numero;
+    const txt = document.createElement("span");
+    txt.textContent = c.fournisseur + " · " + Math.round(c.quantite) + " pce · réception " + c.etat_reception.toLowerCase();
+    lab.append(radio, num, txt); bloc.appendChild(lab);
   });
 }
-function refocusGenerer() { $("btn-generer").focus(); }
 
 async function scanner(code) {
-  message("message-scan", "Recherche de " + code + "...", "alerte");
+  message("message-scan", "Recherche de " + code + "…", "info");
   const r = await fetch("api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   const p = await r.json();
   if (!r.ok) { message("message-scan", "Erreur : " + (p.detail || r.status), "ko"); return refocus(); }
-  if (!p.trouve) { message("message-scan", p.message || "Code inconnu.", "ko"); $("proposition").classList.add("masque"); return refocus(); }
+  if (!p.trouve) {
+    message("message-scan", (p.message || "Code inconnu.") + " (" + code + ")", "ko");
+    $("proposition").classList.add("masque"); return refocus();
+  }
   message("message-scan", "", "");
   afficherProposition(p);
-  if (!p.fiable) $("confirme").focus(); else refocusGenerer();
+  if (!p.fiable) $("confirme").focus(); else $("btn-generer").focus();
 }
 
 async function generer() {
   if (!courant) return;
-  if (!courant.fiable && !$("confirme").checked) { message("alertes", "Confirmer l'article avant de générer la fiche.", "ko"); return; }
+  if (!courant.fiable && !$("confirme").checked) {
+    $("alertes").prepend(blocMessage("Confirmer l'article avant de générer la fiche.", "ko")); return;
+  }
   const corps = { code: courant.code, confirme: $("confirme").checked };
   ["po", "lot_sylob", "lot_fournisseur", "fournisseur"].forEach((c) => { corps[c] = $(c).value.trim(); });
   $("btn-generer").disabled = true;
@@ -187,9 +343,11 @@ async function generer() {
     const nom = decodeURIComponent(r.headers.get("X-Fiche-Nom") || "fiche.xlsx");
     const ou = decodeURIComponent(r.headers.get("X-Fiche-Emplacement") || "");
     const lien = document.createElement("a"); lien.href = URL.createObjectURL(await r.blob()); lien.download = nom; lien.textContent = nom;
-    const li = document.createElement("li"); li.appendChild(lien); li.appendChild(document.createTextNode(" · déposée : " + ou));
-    $("journal").prepend(li);
-    message("message-scan", "Fiche " + nom + " déposée dans le dossier qualité.", "ok");
+    const quand = document.createElement("span"); quand.className = "spec";
+    quand.textContent = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const li = document.createElement("li"); li.append(quand, lien); li.title = ou;
+    $("journal").prepend(li); $("journal-vide").classList.add("masque");
+    message("message-scan", "Fiche déposée dans le dossier qualité : " + nom, "ok");
     annuler();
   } finally { $("btn-generer").disabled = false; }
 }
@@ -200,7 +358,9 @@ $("btn-generer").addEventListener("click", generer);
 $("btn-annuler").addEventListener("click", annuler);
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") annuler();
-  if (ev.key === "Enter" && courant && document.activeElement !== $("code") && document.activeElement.tagName !== "BUTTON") { ev.preventDefault(); generer(); }
+  if (ev.key === "Enter" && courant && document.activeElement !== $("code") && document.activeElement.tagName !== "BUTTON") {
+    ev.preventDefault(); generer();
+  }
 });
 $("fichier-pl").addEventListener("change", async () => {
   const f = $("fichier-pl").files[0]; if (!f) return;

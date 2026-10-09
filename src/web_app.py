@@ -30,6 +30,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.config import Config
@@ -79,6 +80,9 @@ async def _cycle_de_vie(application: FastAPI):
 
 app = FastAPI(title="Fiche de controle reception", lifespan=_cycle_de_vie,
               docs_url=None, redoc_url=None, openapi_url=None)
+# Logo et favicon du design system TB (copies des assets officiels, jamais
+# redessines ni recolores).
+app.mount("/static", StaticFiles(directory=_DOSSIER_STATIQUE), name="static")
 
 
 def _service(request: Request) -> object:
