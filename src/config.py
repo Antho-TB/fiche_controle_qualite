@@ -43,10 +43,16 @@ class Config:
     SMB_SERVEUR: str
     SMB_PARTAGE: str
     SMB_DOSSIER_RACINE: str
-    SMB_SOUS_DOSSIER: str
     SMB_SECRET_LOGIN: str
     SMB_SECRET_PASSWORD: str
+    SOUS_DOSSIER: str
+    DRIVE_DOSSIER_ID: str
+    GCP_SECRET_SA: str
     OCR_ACTIVE: bool
+    GEMINI_ACTIF: bool
+    GEMINI_PROJET: str
+    GEMINI_LOCATION: str
+    GEMINI_MODELE: str
     OPERATEUR_LOCAL: str
 
     @classmethod
@@ -69,18 +75,30 @@ class Config:
         cls.SYLOB_SECRET = os.getenv("SYLOB_SECRET", "tb-sylob-client")
 
         # "local" : dossier du poste ou de developpement. "smb" : SRV-FILES-POM.
+        # "drive" : Drive partage Google, repli decide le 09/10/2026 tant que le
+        # compte de service AD n'est pas cree.
         cls.STOCKAGE = os.getenv("STOCKAGE", "smb" if os.getenv("SMB_SERVEUR") else "local")
+        # Sous-dossier annuel du service qualite : <racine>/<annee>/Contrôle TB.
+        cls.SOUS_DOSSIER = os.getenv("SOUS_DOSSIER", os.getenv("SMB_SOUS_DOSSIER", "Contrôle TB"))
+        cls.DRIVE_DOSSIER_ID = os.getenv("DRIVE_DOSSIER_ID", "")
+        # Cle du compte de service Google (Drive et Vertex AI), JSON au Key Vault.
+        cls.GCP_SECRET_SA = os.getenv("GCP_SECRET_SA", "gcp-fichectrl-sa-key")
         cls.DOSSIER_LOCAL = os.getenv("DOSSIER_LOCAL", "")
         cls.SMB_SERVEUR = os.getenv("SMB_SERVEUR", "")
         cls.SMB_PARTAGE = os.getenv("SMB_PARTAGE", "PARTAGE")
         cls.SMB_DOSSIER_RACINE = os.getenv(
             "SMB_DOSSIER_RACINE", "QUALITE/R4 ACHATS/Contrôle réception")
-        cls.SMB_SOUS_DOSSIER = os.getenv("SMB_SOUS_DOSSIER", "Contrôle TB")
         cls.SMB_SECRET_LOGIN = os.getenv("SMB_SECRET_LOGIN", "svc-fichectrl-ad-login")
         cls.SMB_SECRET_PASSWORD = os.getenv(
             "SMB_SECRET_PASSWORD", "svc-fichectrl-ad-password")
 
         cls.OCR_ACTIVE = _bool("OCR_ACTIVE", True)
+        # Gemini : repli de lecture des Packing Lists que l'OCR n'exploite pas.
+        # Projet GCP dedie, pour lire son cout separement (decision du 09/10).
+        cls.GEMINI_PROJET = os.getenv("GEMINI_PROJET", "")
+        cls.GEMINI_ACTIF = _bool("GEMINI_ACTIF", bool(cls.GEMINI_PROJET))
+        cls.GEMINI_LOCATION = os.getenv("GEMINI_LOCATION", "europe-west1")
+        cls.GEMINI_MODELE = os.getenv("GEMINI_MODELE", "gemini-2.5-flash")
         # Identite affichee hors Easy Auth (poste de developpement).
         cls.OPERATEUR_LOCAL = os.getenv("OPERATEUR_LOCAL", "poste-local")
 

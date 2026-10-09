@@ -129,12 +129,17 @@ def sante(request: Request) -> JSONResponse:
     """Sonde App Service : 200 si la base et chaque table utile repondent."""
     service = getattr(request.app.state, "service", None)
     dwh = service.loader.dwh if service else None
+    # Le commit deploye est rendu dans tous les cas : la CI verifie que le
+    # conteneur sert bien la version qu'elle vient de pousser (piege rencontre
+    # sur FUSEAU le 22/09/2026 : sonde verte sur le code de la veille).
+    commit = os.getenv("FICHE_CONTROLE_COMMIT", "")
     if dwh is None or not dwh.disponible:
-        return JSONResponse({"statut": "degrade", "dwh": False}, status_code=503)
+        return JSONResponse({"statut": "degrade", "dwh": False, "commit": commit},
+                            status_code=503)
     tables = {table: _table_lisible(dwh, table) for table in TABLES_SONDEES}
     code = 200 if all(tables.values()) else 503
-    return JSONResponse({"statut": "ok" if code == 200 else "degrade",
-                         "dwh": True, "tables": tables}, status_code=code)
+    return JSONResponse({"statut": "ok" if code == 200 else "degrade", "dwh": True,
+                         "tables": tables, "commit": commit}, status_code=code)
 
 
 def _table_lisible(dwh: object, table: str) -> bool:

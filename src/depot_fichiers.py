@@ -122,7 +122,7 @@ class DepotSMB:
         self.base: str = "\\\\%s\\%s\\%s\\%d\\%s" % (
             self.serveur, Config.SMB_PARTAGE,
             Config.SMB_DOSSIER_RACINE.replace("/", "\\"), self.annee,
-            Config.SMB_SOUS_DOSSIER)
+            Config.SOUS_DOSSIER)
         self.description = "partage SMB %s" % self.base
         self._identifiants = identifiants
         self._session_ouverte = False
@@ -198,6 +198,9 @@ def _lire_identifiants_smb() -> tuple[str, str]:
 
 def creer_depot() -> DepotFichiers:
     """Instancie le depot designe par la configuration."""
+    if Config.STOCKAGE == "drive":
+        from src.depot_drive import DepotDrive
+        return DepotDrive()
     if Config.STOCKAGE == "smb":
         if not Config.SMB_SERVEUR:
             raise RuntimeError("STOCKAGE=smb mais SMB_SERVEUR est vide.")

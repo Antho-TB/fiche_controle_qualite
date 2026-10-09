@@ -1,0 +1,3 @@
+# A installer avec --no-deps, APRES requirements.txt (voir le commentaire
+# OCR de requirements.txt et le workflow de deploiement).
+rapidocr_onnxruntime==1.2.3

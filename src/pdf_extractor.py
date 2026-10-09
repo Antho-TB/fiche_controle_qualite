@@ -57,6 +57,7 @@ class PDFExtractor:
         self.ocr_available: bool = False
         self.adi_available: bool = False
         self._ocr: Optional[OCREngine] = None
+        self._gemini = None
         self._init_ocr()
         self._load_all_pdfs()
 
@@ -68,6 +69,8 @@ class PDFExtractor:
         """Initialise le moteur OCR local et positionne ocr_available."""
         self._ocr = OCREngine()
         self.ocr_available = self._ocr.disponible
+        from src.lecteur_gemini import LecteurGemini
+        self._gemini = LecteurGemini(self._ocr.dossier_cache)
         # Compatibilite ascendante : le status board historique lisait ce nom.
         self.adi_available = self.ocr_available
 
@@ -106,6 +109,8 @@ class PDFExtractor:
         nom = os.path.basename(pdf_path)
         try:
             results, source = self._extract_from_text(pdf_path)
+            if not results and self._gemini is not None and self._gemini.actif:
+                results, source = self._repli_gemini(pdf_path, source)
             for art_code, infos in results.items():
                 if art_code not in self.articles_pdf:
                     self.articles_pdf[art_code] = []
@@ -117,6 +122,17 @@ class PDFExtractor:
             logger.error("[ECHEC] Extraction PDF %s : %s", nom, e)
             self.rapports.append({"fichier": nom, "moteur": "-", "statut": "ERREUR",
                                   "n_articles": 0, "detail": str(e)})
+
+    def _repli_gemini(self, pdf_path: str,
+                      source: str) -> tuple[dict[str, list[dict]], str]:
+        """Dernier recours quand ni le texte natif ni l'OCR n'ont donne d'article."""
+        from src.lecteur_gemini import vers_resultats
+        logger.info("[INFO] %s : aucun article via %s, lecture par Gemini.",
+                    os.path.basename(pdf_path), source)
+        lecture = self._gemini.lire(pdf_path)
+        if lecture is None:
+            return {}, source
+        return vers_resultats(lecture), "%s+Gemini" % source
 
     def _rapporter(self, nom: str, source: str, results: dict) -> None:
         """Consigne le resultat d extraction d une Packing List."""

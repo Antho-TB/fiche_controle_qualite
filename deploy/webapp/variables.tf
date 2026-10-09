@@ -160,7 +160,41 @@ variable "secret_smb_password" {
   default     = "svc-fichectrl-ad-password"
 }
 
+# --- Depot des fiches ----------------------------------------------------------
+
+variable "stockage" {
+  description = <<-EOT
+    Ou deposer fiches et Packing Lists : "drive" (Drive partage Google, repli
+    decide le 09/10/2026 en attendant le compte de service AD svc-fichectrl) ou
+    "smb" (partage qualite SRV-FILES-POM, cible).
+  EOT
+  type        = string
+  default     = "drive"
+  validation {
+    condition     = contains(["drive", "smb"], var.stockage)
+    error_message = "stockage vaut drive ou smb."
+  }
+}
+
+variable "drive_dossier_id" {
+  description = "Identifiant du dossier du Drive partage qualite (fin de son URL). Le compte de service Google doit en etre membre."
+  type        = string
+  default     = ""
+}
+
+variable "secret_gcp_sa" {
+  description = "Secret Key Vault portant la cle JSON du compte de service Google (Drive et Gemini)."
+  type        = string
+  default     = "gcp-fichectrl-sa-key"
+}
+
 # --- Gemini (repli OCR) ------------------------------------------------------
+
+variable "gemini_actif" {
+  description = "Active le repli Gemini. A passer a true une fois le projet GCP dedie cree."
+  type        = bool
+  default     = false
+}
 
 variable "gcp_projet_gemini" {
   description = <<-EOT

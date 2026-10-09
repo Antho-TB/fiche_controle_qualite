@@ -8,8 +8,15 @@ Strategie :
   (mesure sur les archives : 5 Packing Lists sur 19). Pour ceux-la, bascule sur
   un OCR local, avec le francais, l anglais ET le chinois simplifie, la plupart
   des fournisseurs etant chinois.
-- Le moteur retenu est pytesseract + pdf2image, deja en production cote FUSEAU
-  (`src/scripts/gmail/parse_bl.py`). On reutilise, on ne reconstruit pas.
+- Deux moteurs OCR, essayes dans cet ordre (schema valide le 09/10/2026) :
+    1. RapidOCR (modeles PaddleOCR via onnxruntime, rendu des pages par
+       pypdfium2) : installe par pip seul, sans binaire systeme, donc
+       utilisable sur la Web App Azure ; meilleur que tesseract sur le chinois
+       et les tableaux denses ;
+    2. tesseract + pdf2image, livre dans tools/ avec l'executable du poste.
+  Si aucun ne produit un texte exploitable, PDFExtractor passe la main a
+  Gemini (src/lecteur_gemini.py), et chaque valeur lue reste confrontee a
+  Sylob et au DWH avant d'atteindre la fiche.
   Azure Document Intelligence est abandonne : il exigeait un Key Vault, un
   reseau sortant et des packages Azure que l executable livre n embarquait pas,
   et il n a donc jamais tourne en production.
@@ -72,16 +79,23 @@ class OCREngine:
     """Extracteur de texte avec repli OCR local et cache par fichier."""
 
     def __init__(self, langues: str = LANGUES_DEFAUT) -> None:
+        from src.config import Config
         self.langues: str = langues
         self.dossier_cache: str = os.path.join(get_base_path(), ".cache", "ocr")
         self.tesseract: Optional[str] = _chemin_tesseract()
         self.poppler: Optional[str] = _chemin_poppler()
-        self.disponible: bool = bool(self.tesseract and self.poppler)
+        self.moteurs: list[str] = []
+        if Config.OCR_ACTIVE and _rapidocr_installe():
+            self.moteurs.append("RapidOCR")
+        if Config.OCR_ACTIVE and self.tesseract and self.poppler:
+            self.moteurs.append("Tesseract")
+        self.disponible: bool = bool(self.moteurs)
         if self.disponible:
-            logger.info("[SUCCES] OCR local disponible (%s).", self.langues)
+            logger.info("[SUCCES] OCR local disponible : %s.", ", ".join(self.moteurs))
         else:
-            logger.warning("[ATTENTION] OCR indisponible : tesseract=%s poppler=%s. "
-                           "Les Packing Lists scannees resteront inexploitables.",
+            logger.warning("[ATTENTION] Aucun OCR local (OCR_ACTIVE=%s, RapidOCR=%s, "
+                           "tesseract=%s, poppler=%s). Les Packing Lists scannees "
+                           "dependront de Gemini.", Config.OCR_ACTIVE, _rapidocr_installe(),
                            bool(self.tesseract), bool(self.poppler))
 
     # ------------------------------------------------------------------
@@ -96,7 +110,8 @@ class OCREngine:
             chemin_pdf: Chemin du PDF a lire.
 
         Returns:
-            Tuple (texte, moteur) ou moteur vaut PyPDF, OCR, CACHE ou VIDE.
+            Tuple (texte, moteur) ou moteur vaut PyPDF, RapidOCR, Tesseract,
+            CACHE ou VIDE.
         """
         texte = self._texte_natif(chemin_pdf)
         if len(texte) >= _SEUIL_TEXTE_UTILE:
@@ -106,16 +121,18 @@ class OCREngine:
         if cache is not None:
             return cache, "CACHE"
 
-        if not self.disponible:
-            logger.error("[ECHEC] %s : PDF scanne et OCR indisponible.",
+        for moteur in self.moteurs:
+            texte = self._rapidocr(chemin_pdf) if moteur == "RapidOCR" else self._ocr(chemin_pdf)
+            if len(texte) >= _SEUIL_TEXTE_UTILE:
+                self._ecrire_cache(chemin_pdf, texte)
+                return texte, moteur
+            logger.warning("[ATTENTION] %s : %s n'a rien produit d'exploitable.",
+                           os.path.basename(chemin_pdf), moteur)
+        if not self.moteurs:
+            logger.error("[ECHEC] %s : PDF scanne et aucun OCR local.",
                          os.path.basename(chemin_pdf))
-            return "", "VIDE"
-
-        texte = self._ocr(chemin_pdf)
-        if texte:
-            self._ecrire_cache(chemin_pdf, texte)
-            return texte, "OCR"
         return "", "VIDE"
+
 
     # ------------------------------------------------------------------
     # Moteurs
@@ -131,6 +148,38 @@ class OCREngine:
             logger.warning("[ATTENTION] Lecture native impossible (%s) : %s",
                            os.path.basename(chemin_pdf), e)
             return ""
+
+    def _rapidocr(self, chemin_pdf: str) -> str:
+        """
+        OCR par RapidOCR, page par page, en reconstituant les lignes.
+
+        Junior Tip : RapidOCR rend des boites de texte, pas des lignes. Les
+        regex fournisseur de PDFExtractor travaillent ligne par ligne : on
+        regroupe donc les boites dont le centre vertical est proche, puis on les
+        ordonne de gauche a droite.
+        """
+        try:
+            import numpy
+            import pypdfium2
+            moteur = _moteur_rapidocr()
+            document = pypdfium2.PdfDocument(chemin_pdf)
+        except Exception as e:
+            logger.error("[ECHEC] RapidOCR indisponible pour %s : %s",
+                         os.path.basename(chemin_pdf), e)
+            return ""
+        pages: list[str] = []
+        for numero in range(len(document)):
+            try:
+                image = document[numero].render(scale=_DPI_OCR / 72).to_pil().convert("RGB")
+                boites, _ = moteur(numpy.array(image))
+                pages.append(_lignes_depuis_boites(boites or []))
+            except Exception as e:
+                logger.error("[ECHEC] RapidOCR page %d de %s : %s", numero + 1,
+                             os.path.basename(chemin_pdf), e)
+        texte = "\n".join(pages).strip()
+        logger.info("[SUCCES] RapidOCR de %s : %d page(s), %d caracteres.",
+                    os.path.basename(chemin_pdf), len(document), len(texte))
+        return texte
 
     def _ocr(self, chemin_pdf: str) -> str:
         """Convertit chaque page en image puis la soumet a tesseract."""
@@ -198,3 +247,49 @@ class OCREngine:
                            "langues": self.langues, "texte": texte}, flux)
         except Exception as e:
             logger.warning("[ATTENTION] Ecriture du cache OCR impossible : %s", e)
+
+
+# ----------------------------------------------------------------------
+# RapidOCR : moteur partage et reconstitution des lignes
+# ----------------------------------------------------------------------
+
+_moteur_partage = None
+
+
+def _rapidocr_installe() -> bool:
+    """Vrai si RapidOCR et le moteur de rendu PDF sont importables."""
+    import importlib.util
+    return all(importlib.util.find_spec(m) is not None
+               for m in ("rapidocr_onnxruntime", "pypdfium2"))
+
+
+def _moteur_rapidocr() -> object:
+    """Charge les modeles une seule fois par processus (quelques secondes)."""
+    global _moteur_partage
+    if _moteur_partage is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _moteur_partage = RapidOCR()
+    return _moteur_partage
+
+
+def _lignes_depuis_boites(boites: list) -> str:
+    """
+    Regroupe les boites RapidOCR [coins, texte, score] en lignes de texte.
+
+    Deux boites sont sur la meme ligne si l'ecart de leur centre vertical est
+    inferieur a la moitie de la hauteur de la ligne en cours.
+    """
+    elements = []
+    for coins, texte, _score in boites:
+        ys = [point[1] for point in coins]
+        elements.append({"x": min(point[0] for point in coins),
+                         "y": sum(ys) / len(ys), "h": max(ys) - min(ys), "t": texte})
+    elements.sort(key=lambda e: e["y"])
+    lignes: list[list[dict]] = []
+    for element in elements:
+        if lignes and abs(element["y"] - lignes[-1][0]["y"]) < max(lignes[-1][0]["h"], 1) / 2:
+            lignes[-1].append(element)
+        else:
+            lignes.append([element])
+    return "\n".join(" ".join(e["t"] for e in sorted(ligne, key=lambda e: e["x"]))
+                     for ligne in lignes)

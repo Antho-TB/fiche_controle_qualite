@@ -12,6 +12,15 @@ environment  = "prod"
 # A renseigner avant l'apply : object id du groupe Entra du service qualite.
 groupe_utilisateurs_object_id = ""
 
+# Depot des fiches : Drive partage en attendant le compte AD svc-fichectrl
+# (ticket GLPI). drive_dossier_id = fin de l'URL du dossier du Drive partage,
+# renseigne apres deploy/gcp/creer_projet_fichectrl.ps1.
+stockage         = "drive"
+drive_dossier_id = ""
+
+# Repli Gemini : a passer a true une fois le projet GCP dedie cree.
+gemini_actif = false
+
 # Tag owner volontairement absent : la policy tag-owner-a refuse toute adresse
 # mail (constat FUSEAU du 03/09/2026, remonte a Nubo).
 tags = {

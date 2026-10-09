@@ -87,7 +87,11 @@ resource "azurerm_linux_web_app" "app" {
     }
 
     # Un worker : un ou deux postes reception, generation Excel en memoire.
-    app_command_line = "gunicorn src.web_app:app --worker-class uvicorn.workers.UvicornWorker --workers 1 --timeout 120 --bind 0.0.0.0:8000"
+    # Paquets construits par la CI dans .python_packages (pas de build Oryx :
+    # il installerait opencv-python, dont l'import echoue faute de libGL).
+    # Timeout large : la premiere lecture OCR d'un scan prend plusieurs
+    # dizaines de secondes, ensuite le cache repond.
+    app_command_line = "python -m gunicorn src.web_app:app --worker-class uvicorn.workers.UvicornWorker --workers 1 --timeout 300 --bind 0.0.0.0:8000"
 
     health_check_path                 = "/api/health"
     health_check_eviction_time_in_min = 5
@@ -112,8 +116,11 @@ resource "azurerm_linux_web_app" "app" {
     "SYLOB_HOTE"   = var.sylob_hote
     "SYLOB_SECRET" = var.secret_sylob
 
-    # Depot des fiches sur le partage qualite, en SMB, sous un compte de
-    # service AD dedie (jamais le compte de l'operateur).
+    # Depot des fiches : "drive" (repli en attendant le compte AD) ou "smb"
+    # (partage qualite SRV-FILES-POM sous le compte de service svc-fichectrl).
+    "STOCKAGE"            = var.stockage
+    "DRIVE_DOSSIER_ID"    = var.drive_dossier_id
+    "GCP_SECRET_SA"       = var.secret_gcp_sa
     "SMB_SERVEUR"         = var.smb_serveur
     "SMB_PARTAGE"         = var.smb_partage
     "SMB_DOSSIER_RACINE"  = var.smb_dossier_racine
@@ -123,14 +130,15 @@ resource "azurerm_linux_web_app" "app" {
     # Lecture des scans (schema valide le 09/10/2026) : texte natif, puis
     # RapidOCR (pip seul, pas de conteneur), puis Gemini en repli. Chaque valeur
     # lue est confirmee par Sylob ou le DWH avant d'atteindre la fiche.
-    # OCR_ACTIVE passe a 1 quand la chaine RapidOCR + Gemini est livree.
-    "OCR_ACTIVE"      = "0"
+    "OCR_ACTIVE"      = "1"
+    "GEMINI_ACTIF"    = var.gemini_actif ? "1" : "0"
     "GEMINI_PROJET"   = var.gcp_projet_gemini
     "GEMINI_LOCATION" = var.gcp_region_gemini
     "GEMINI_MODELE"   = var.gemini_modele
 
     "WEBSITE_TIMEZONE"                    = "Europe/Paris"
-    "SCM_DO_BUILD_DURING_DEPLOYMENT"      = "1"
+    "SCM_DO_BUILD_DURING_DEPLOYMENT"      = "0"
+    "PYTHONPATH"                          = "/home/site/wwwroot/.python_packages/lib/site-packages"
     "PYTHON_ENABLE_GUNICORN_MULTIWORKERS" = "false"
     "WEBSITE_DNS_SERVER"                  = "168.63.129.16"
   }
@@ -175,13 +183,21 @@ resource "azurerm_linux_web_app" "app" {
 # admin PostgreSQL et ceux de MyReport. Un role au niveau du coffre donnerait a
 # cette Web App la lecture de tout le reste.
 locals {
-  secrets_lus = {
-    pg_login     = var.secret_login_pg
-    pg_password  = var.secret_password_pg
-    sylob        = var.secret_sylob
-    smb_login    = var.secret_smb_login
-    smb_password = var.secret_smb_password
-  }
+  # Une attribution sur un secret qui n'existe pas encore echoue : les secrets
+  # SMB ne sont lus qu'une fois le compte AD cree (stockage = "smb"), la cle
+  # Google qu'une fois le projet GCP cree (Drive ou Gemini actif).
+  secrets_lus = merge(
+    {
+      pg_login    = var.secret_login_pg
+      pg_password = var.secret_password_pg
+      sylob       = var.secret_sylob
+    },
+    var.stockage == "smb" ? {
+      smb_login    = var.secret_smb_login
+      smb_password = var.secret_smb_password
+    } : {},
+    var.stockage == "drive" || var.gemini_actif ? { gcp_sa = var.secret_gcp_sa } : {},
+  )
 }
 
 resource "azurerm_role_assignment" "app_lit_ses_secrets" {

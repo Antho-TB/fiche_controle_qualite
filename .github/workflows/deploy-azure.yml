@@ -1,0 +1,148 @@
+# =============================================================================
+# [CI] FICHE DE CONTROLE - TESTS ET DEPLOIEMENT SUR AZURE APP SERVICE
+# =============================================================================
+# Patron FUSEAU (Data-Achat/.github/workflows/deploy-azure.yml), avec deux
+# differences :
+#   - les dependances sont construites ICI dans .python_packages, et la Web App
+#     ne lance pas de build Oryx (SCM_DO_BUILD_DURING_DEPLOYMENT=0). Raison :
+#     rapidocr_onnxruntime exige opencv-python, dont l'import echoue sur App
+#     Service faute de libGL. On l'installe sans ses dependances et on fournit
+#     opencv-python-headless a la place (voir requirements.txt) ;
+#   - les tests tournent avant tout deploiement : un test rouge bloque la prod.
+#
+# Authentification Azure par OIDC, sans secret de longue duree. Les trois
+# secrets AZURE_* sont poses sur l'environnement production par
+# deploy/webapp/deployer_infra.ps1. Terraform n'est JAMAIS applique ici.
+# =============================================================================
+
+name: Deploiement Fiche de controle (Azure App Service)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "0_Modele_Et_Donnees/*.xlsx"
+      - "requirements*.txt"
+      - ".github/workflows/deploy-azure.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploiement-fichectrl-prod
+  cancel-in-progress: false
+
+env:
+  NOM_WEBAPP: app-shsv-fichectrl-prod
+  GROUPE_RESSOURCES: rg-shsv-fichectrl-prod
+  VERSION_PYTHON: "3.11"
+  CIBLE_PAQUETS: .python_packages/lib/site-packages
+
+jobs:
+  tester:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.VERSION_PYTHON }}
+      - name: Installer les dependances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install --no-deps -r requirements-ocr.txt
+      - name: Lancer les tests
+        run: python -m pytest -q
+      - name: Verifier que l'application s'importe
+        # Un import qui casse doit echouer ici, pas en prod sur un conteneur qui
+        # redemarre en boucle. Le service metier n'est pas cree a l'import.
+        run: python -c "from src.web_app import app; print('[SUCCES] Application importee :', app.title)"
+
+  deployer:
+    needs: tester
+    # DEPLOIEMENT_ACTIF (variable du depot) est posee par deployer_infra.ps1 une
+    # fois l'infra appliquee : avant, seuls les tests tournent, sans echec rouge.
+    if: github.event_name != 'pull_request' && vars.DEPLOIEMENT_ACTIF == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.VERSION_PYTHON }}
+
+      - name: Construire les dependances pour App Service
+        run: |
+          python -m pip install --upgrade pip
+          pip install --target "${CIBLE_PAQUETS}" -r requirements.txt
+          pip install --target "${CIBLE_PAQUETS}" --no-deps -r requirements-ocr.txt
+          # Garde-fou : la variante graphique d'OpenCV ne doit jamais partir.
+          if ls "${CIBLE_PAQUETS}" | grep -E '^opencv_python-[0-9]'; then
+            echo "[ECHEC] opencv-python (non headless) present dans le paquet." && exit 1
+          fi
+
+      - name: Construire le paquet de deploiement
+        # Le code, le gabarit de fiche et les dependances. Ni l'executable, ni
+        # les Packing Lists archivees, ni le referentiel CSV historique.
+        run: |
+          zip -qr paquet.zip src .python_packages \
+            "0_Modele_Et_Donnees/FOR-ACH-30-2 Fiche d'inspection produit-Contrôle réception.xlsx" \
+            requirements.txt -x "*__pycache__*" -x "*.pyc"
+          ls -lh paquet.zip
+
+      - name: Se connecter a Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deployer sur la Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.NOM_WEBAPP }}
+          package: paquet.zip
+
+      - name: Estampiller la version deployee
+        # Pose le SHA dans les app settings : la sonde le renvoie, et la
+        # modification d'un app setting recycle le conteneur.
+        run: |
+          az webapp config appsettings set \
+            --resource-group "${GROUPE_RESSOURCES}" --name "${NOM_WEBAPP}" \
+            --settings FICHE_CONTROLE_COMMIT="${GITHUB_SHA}" --output none
+
+      - name: Verifier la version servie et la protection Entra ID
+        # Le commit servi doit etre celui qu'on vient de pousser. Un pipeline
+        # vert sur l'ancienne version est pire qu'un pipeline rouge.
+        run: |
+          url="https://${NOM_WEBAPP}.azurewebsites.net"
+          commit_servi() {
+            curl -s --max-time 20 "${url}/api/health" 2>/dev/null \
+              | sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+          }
+          attendre() {
+            for tentative in $(seq 1 32); do
+              if [ "$(commit_servi)" = "${GITHUB_SHA}" ]; then
+                echo "[SUCCES] Version ${GITHUB_SHA} servie (tentative ${tentative})."; return 0
+              fi
+              echo "  tentative ${tentative}/32 : servi='$(commit_servi)'"; sleep 15
+            done
+            return 1
+          }
+          if ! attendre; then
+            echo "[ATTENTION] Version attendue non servie, redemarrage force."
+            az webapp restart --resource-group "${GROUPE_RESSOURCES}" --name "${NOM_WEBAPP}" --output none
+            attendre || { echo "[ECHEC] ${GITHUB_SHA} toujours pas servi."; exit 1; }
+          fi
+          sante=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${url}/api/health")
+          [ "${sante}" = "200" ] || echo "[ATTENTION] /api/health=${sante} : base ou table illisible, voir les logs."
+          racine=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${url}/")
+          case "${racine}" in
+            302|401|403) echo "[SUCCES] Racine protegee par Entra ID (${racine})." ;;
+            *) echo "[ECHEC] Racine anonyme : ${racine}" && exit 1 ;;
+          esac

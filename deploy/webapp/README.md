@@ -39,61 +39,60 @@ La Web App partage le plan de FUSEAU, donc aussi son sous-réseau d'intégration
 restent dans le state FUSEAU et ne sont que lues ici. **Un `destroy` ou un
 changement de SKU de FUSEAU touche aussi la fiche de contrôle.**
 
-## Prérequis avant le premier apply
+## Qui lance quoi
 
-1. **Droits sur le state** : `Storage Blob Data Contributor` sur
-   `stplatformtfstatestbprod`. Antho l'a déjà depuis FUSEAU.
-2. **Compte de service PostgreSQL en lecture seule** :
+Ton compte quotidien `a.bezille@tb-groupe.fr` ne peut pas appliquer l'infrastructure (constat du
+09/10/2026) :
+- sa session CLI ne porte pas de MFA, alors que toute écriture Azure l'exige ;
+- il n'a aucun droit sur le fichier d'état Terraform (state) ;
+- il ne peut pas écrire de secret.
+
+Le compte **`abezille@tbgroupefr.onmicrosoft.com`** (ton compte AD synchronisé) a ces droits. Les
+scripts l'utilisent dans un profil Azure CLI séparé (`$HOME\.azure-admin`), sans toucher aux
+autres terminaux.
+
+## Déroulé, dans l'ordre
+
+1. **Projet GCP dédié** (Gemini et Drive), après `gcloud auth login` :
    ```powershell
-   az keyvault secret set --vault-name kv-dtpf-prod --name psql-prod-fichectrl-app-login --value dtpf_fichectrl_app_prod
-   az keyvault secret set --vault-name kv-dtpf-prod --name psql-prod-fichectrl-app-password --value "<secret genere, jamais commite>"
+   powershell -ExecutionPolicy Bypass -File deploy\gcp\creer_projet_fichectrl.ps1
    ```
-   Puis lancer `sql/role_fichectrl_lecture.sql` avec le compte admin (la
-   procédure est dans l'en-tête du fichier). Le contrôle en fin de script doit
-   lister exactement six tables, toutes en `SELECT`.
-3. **Groupe Entra du service qualité** : renseigner son object id dans
-   `variables.auto.tfvars` (`groupe_utilisateurs_object_id`). Si la variable
-   reste vide, tout le tenant TB peut ouvrir l'application.
-4. **Compte de service AD `svc-fichectrl`** (ticket GLPI, Alban) avec le droit
-   de modifier `QUALITE\R4 ACHATS\Contrôle réception`. Antho dépose ensuite le
-   login et le mot de passe dans `svc-fichectrl-ad-login` et
-   `svc-fichectrl-ad-password`.
+   Le script crée le projet `tb-ai-fichectrl-prod`, active les API Vertex AI et Drive, crée le
+   compte de service `sa-fichectrl`, dépose sa clé directement au Key Vault
+   (`gcp-fichectrl-sa-key`) et pose une alerte budgétaire de 20 € par mois.
+   Ensuite, dans Google Drive :
+   - créer le Drive partagé qualité ;
+   - y ajouter le compte de service comme « Gestionnaire de contenu » ;
+   - reporter l'identifiant du dossier dans `variables.auto.tfvars` (`drive_dossier_id`) et passer
+     `gemini_actif = true`.
+2. **Groupe Entra du service qualité** : renseigner `groupe_utilisateurs_object_id`.
+3. **Infrastructure** (VPN actif) :
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File deploy\webapp\deployer_infra.ps1
+   ```
+   Chaque étape demande confirmation :
+   - secrets et rôle PostgreSQL en lecture seule (`appliquer_role_fichectrl.py`, simulation
+     d'abord) ;
+   - `terraform plan`, **à relire**, puis `apply` ;
+   - dépôt du secret Easy Auth (hors state) ;
+   - environnement GitHub `production`, secrets OIDC et variable `DEPLOIEMENT_ACTIF`.
+4. **Déploiement du code** : relancer le workflow « Déploiement Fiche de contrôle » sur GitHub, ou
+   pousser sur `main`. Le workflow lance les tests, construit les dépendances, déploie, puis
+   vérifie que le commit servi est bien le bon et que la racine est protégée par Entra.
+5. **Passage au partage SMB**, quand Alban aura créé `svc-fichectrl` (ticket GLPI) :
+   - déposer `svc-fichectrl-ad-login` et `svc-fichectrl-ad-password` au Key Vault ;
+   - passer `stockage = "smb"` ;
+   - relancer l'étape 3.
 
-## Déroulé
+## Dépendances : pourquoi la CI les construit
 
-```powershell
-cd deploy/webapp
-terraform init
-terraform plan -out tfplan        # A RELIRE avant l'apply
-terraform apply tfplan
+`rapidocr_onnxruntime` exige `opencv-python`, dont l'import échoue sur App Service faute de
+`libGL`. La CI installe donc les dépendances dans `.python_packages` :
+- `opencv-python-headless` à la place d'`opencv-python` ;
+- RapidOCR sans ses dépendances (`requirements-ocr.txt`).
 
-$secret = terraform output -raw secret_auth_a_deposer
-az webapp config appsettings set -g rg-shsv-fichectrl-prod -n app-shsv-fichectrl-prod `
-  --settings MICROSOFT_PROVIDER_AUTHENTICATION_SECRET=$secret
-Remove-Variable secret
-```
-
-Ensuite, reporter `cicd_azure_client_id`, `cicd_azure_tenant_id` et
-`cicd_azure_subscription_id` dans les secrets GitHub du dépôt
-`Antho-TB/fiche_controle_qualite`, puis créer l'environnement `production`.
-La fédération OIDC attend le sujet `repo:<depot>:environment:production`.
-
-## Code à écrire avant le premier déploiement
-
-Le Terraform suppose les éléments suivants, qui **n'existent pas encore** :
-- `src/web_app.py` : une application FastAPI avec une page de scan (un champ
-  qui reçoit la saisie de la douchette, envoyée par Entrée), le dépôt de la
-  Packing List, le téléchargement de la fiche, et `/api/health` qui teste un
-  `SELECT` sur chacune des six tables ;
-- `dwh_repository` et `sylob_api` doivent lire leurs paramètres dans
-  l'environnement (`KEY_VAULT_NAME`, `PG_*`, `SYLOB_*`, `SMB_*`, `OCR_ACTIVE`)
-  au lieu des constantes actuelles ;
-- un module `depot_fichiers` doit lire les Packing Lists et écrire les fiches en
-  SMB (`smbprotocol`), avec le dossier de l'année calculé et non figé sur 2026,
-  et un repli vers le Drive derrière la même interface ;
-- l'identité de l'opérateur (en-tête `X-MS-CLIENT-PRINCIPAL-NAME` injecté par
-  Easy Auth) doit être inscrite sur la fiche et dans le journal ;
-- `.github/workflows/deploy-azure.yml`, sur le modèle de Data-Achat.
+La Web App ne lance pas de build Oryx (`SCM_DO_BUILD_DURING_DEPLOYMENT=0`, `PYTHONPATH` pointé sur
+`.python_packages`).
 
 ## Vérifications de recette
 

@@ -30,3 +30,22 @@ python-multipart>=0.0.9
 
 # Depot des fiches sur SRV-FILES-POM (SMB, compte de service svc-fichectrl)
 smbprotocol>=1.13.0
+
+# Lecture des Packing Lists scannees (schema du 09/10/2026) : RapidOCR sans
+# binaire systeme, puis Gemini en repli. rapidocr_onnxruntime est installe a part
+# et SANS ses dependances (requirements-ocr.txt) : il exige opencv-python, dont
+# l'import echoue sur App Service faute de libGL. On fournit a la place la
+# variante headless, qui expose le meme module cv2.
+opencv-python-headless>=4.8
+onnxruntime>=1.17
+numpy>=1.24
+pyclipper>=1.3
+Shapely>=2.0
+PyYAML>=6.0
+six>=1.16
+Pillow>=10.0
+pypdfium2>=4.30
+
+# Google : Drive partage (repli du depot) et Vertex AI Gemini
+google-auth>=2.30
+google-genai>=1.0

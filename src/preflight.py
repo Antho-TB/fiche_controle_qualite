@@ -94,7 +94,9 @@ def verifier_ocr() -> bool:
     from src.ocr_engine import OCREngine, _dossier_outils
     moteur = OCREngine()
     if not moteur.disponible:
-        return _ligne("OCR local", False, "tesseract ou poppler introuvable")
+        return _ligne("OCR local", False, "ni RapidOCR ni tesseract")
+    if "RapidOCR" in moteur.moteurs:
+        return _ligne("OCR local", True, ", ".join(moteur.moteurs))
     tessdata = os.path.join(_dossier_outils(), "tesseract", "tessdata")
     manquantes = [langue for langue in ("eng", "fra", "chi_sim")
                   if not os.path.exists(os.path.join(tessdata,
