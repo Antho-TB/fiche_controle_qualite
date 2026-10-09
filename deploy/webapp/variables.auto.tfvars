@@ -16,10 +16,10 @@ groupe_utilisateurs_object_id = ""
 # (ticket GLPI). drive_dossier_id = fin de l'URL du dossier du Drive partage,
 # renseigne apres deploy/gcp/creer_projet_fichectrl.ps1.
 stockage         = "drive"
-drive_dossier_id = ""
+drive_dossier_id = "0ACZ6_BwnqSS_Uk9PVA" # Drive partage "Fiche de Controle"
 
 # Repli Gemini : a passer a true une fois le projet GCP dedie cree.
-gemini_actif = false
+gemini_actif = true
 
 # Tag owner volontairement absent : la policy tag-owner-a refuse toute adresse
 # mail (constat FUSEAU du 03/09/2026, remonte a Nubo).

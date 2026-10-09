@@ -204,7 +204,7 @@ variable "gcp_projet_gemini" {
     federation d'identite depuis l'identite managee Azure, sans cle JSON.
   EOT
   type        = string
-  default     = "tb-ai-fichectrl-prod"
+  default     = "qualitefichecontrole"
 }
 
 variable "gcp_region_gemini" {

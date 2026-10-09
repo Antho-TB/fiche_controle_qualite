@@ -20,9 +20,13 @@
 # Usage : powershell -ExecutionPolicy Bypass -File deploy\gcp\creer_projet_fichectrl.ps1
 # =============================================================================
 
+param(
+    # Projet et compte de service crees par Antho le 09/10/2026 dans la console.
+    [string]$Projet = "qualitefichecontrole",
+    [string]$Compte = "compteserve"
+)
+
 $ErrorActionPreference = "Stop"
-$Projet = "tb-ai-fichectrl-prod"
-$Compte = "sa-fichectrl"
 $Email = "$Compte@$Projet.iam.gserviceaccount.com"
 $env:AZURE_CONFIG_DIR = Join-Path $HOME ".azure-admin"
 
@@ -36,10 +40,14 @@ if (-not $existe) {
     if (-not (Confirmer "Creer le projet GCP $Projet ?")) { return }
     gcloud projects create $Projet --name="Fiche de controle reception" --labels=app=fiche-controle,equipe=data
 }
-Write-Host "Comptes de facturation disponibles :"
-gcloud billing accounts list --format="table(name,displayName,open)"
-$facturation = Read-Host "Identifiant du compte de facturation TB (billingAccounts/XXXXXX-XXXXXX-XXXXXX, sans le prefixe)"
-gcloud billing projects link $Projet --billing-account=$facturation
+$facturation = (gcloud billing projects describe $Projet --format="value(billingAccountName)") -replace "^billingAccounts/", ""
+if (-not $facturation) {
+    Write-Host "Comptes de facturation disponibles :"
+    gcloud billing accounts list --format="table(name,displayName,open)"
+    $facturation = Read-Host "Identifiant du compte de facturation TB (XXXXXX-XXXXXX-XXXXXX)"
+    gcloud billing projects link $Projet --billing-account=$facturation
+}
+Write-Host "[SUCCES] Facturation : $facturation."
 
 Write-Host "=== 2. API ===" -ForegroundColor Cyan
 gcloud services enable aiplatform.googleapis.com drive.googleapis.com --project=$Projet
@@ -78,9 +86,7 @@ if (Confirmer "Creer une alerte budgetaire a 20 EUR par mois sur ce projet ?") {
 }
 
 Write-Host ""
-Write-Host "Reste a faire a la main, dans Google Drive :" -ForegroundColor Yellow
-Write-Host "  1. Creer le Drive partage 'Controle reception qualite' (ou reutiliser un existant)."
-Write-Host "  2. Y ajouter $Email comme 'Gestionnaire de contenu'."
-Write-Host "  3. Copier l'identifiant du dossier (fin de son URL) dans"
-Write-Host "     deploy\webapp\variables.auto.tfvars : drive_dossier_id, puis gemini_actif = true."
-Write-Host "  4. Relancer deploy\webapp\deployer_infra.ps1."
+Write-Host "Verifier dans Google Drive :" -ForegroundColor Yellow
+Write-Host "  Drive partage 'Fiche de Controle' : $Email doit y etre 'Gestionnaire de contenu'"
+Write-Host "  (pas Administrateur : il n'a pas a gerer les membres ni a supprimer le Drive)."
+Write-Host "  Ensuite : deploy\webapp\deployer_infra.ps1."

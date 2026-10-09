@@ -57,8 +57,8 @@ autres terminaux.
    ```powershell
    powershell -ExecutionPolicy Bypass -File deploy\gcp\creer_projet_fichectrl.ps1
    ```
-   Le script crée le projet `tb-ai-fichectrl-prod`, active les API Vertex AI et Drive, crée le
-   compte de service `sa-fichectrl`, dépose sa clé directement au Key Vault
+   Le script crée le projet `qualitefichecontrole`, active les API Vertex AI et Drive, crée le
+   compte de service `compteserve`, dépose sa clé directement au Key Vault
    (`gcp-fichectrl-sa-key`) et pose une alerte budgétaire de 20 € par mois.
    Ensuite, dans Google Drive :
    - créer le Drive partagé qualité ;

@@ -3,7 +3,7 @@
 
 Strategie :
 - Un seul compte de service Google, porte par le projet GCP dedie a la fiche
-  de controle (tb-ai-fichectrl-prod) : son cout Gemini se lit a part, et il est
+  de controle (qualitefichecontrole) : son cout Gemini se lit a part, et il est
   membre du Drive partage du service qualite.
 - Sa cle JSON est au Key Vault (Config.GCP_SECRET_SA), lue par l'identite
   managee de la Web App. En developpement, GOOGLE_APPLICATION_CREDENTIALS peut
