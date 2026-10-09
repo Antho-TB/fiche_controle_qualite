@@ -44,7 +44,7 @@ unitaires `SYLOB-*`), puis `.env` local. **Le `.env` n'est plus déployé.**
   dimension conforme `ref.article`. **Ne jamais pointer ce projet sur `achat.*`
   en direct** (gouvernance des schémas, socle §2).
 - PO / lot / fournisseur doivent basculer sur `psql-dtpf-psql-prod`
-  (`commandes_detaillees27`, `tracabilite`, `achat.ot_transport`) : les regex
+  (`commandes_detaillees`, `tracabilite`, `achat.ot_transport`) : les regex
   par format fournisseur plafonnent à 11 Packing Lists exploitables sur 19.
 - OCR : exige `tools/tesseract` (langues eng, fra, chi_sim) et `tools/poppler`.
   Sans eux, les Packing Lists scannées sont inexploitables, et l'application le

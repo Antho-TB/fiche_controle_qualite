@@ -10,8 +10,13 @@ Strategie :
     * `articles3` : referentiel article (39 580 lignes, 3 societes). Porte
       code_gtin_13, sup_ean14_pcb, sup_ean14_spcb et sup_ean14_palette, donc
       couvre le scan unite ET le scan carton.
-    * `commandes_detaillees27` : lignes de commande d ACHAT (numero de commande
-      au format 00169477, etat de reception, ETD confirme).
+    * `commandes_detaillees` (SANS suffixe) : lignes de commande d ACHAT
+      (numero au format 00169477, etat de reception, ETD confirme). C est la
+      seule version que MyReport alimente encore : `commandes_detaillees27`
+      est figee depuis le 04/08/2026 (derniere commande au 30/06), alors que
+      celle-ci porte 5 440 lignes creees depuis (mesure du 09/10/2026). Les
+      suffixes numerotes sont des versions abandonnees de MyReport : verifier
+      la fraicheur (pg_stat_user_tables) avant de changer de table.
     * `tracabilite` : numero de lot par article et par livraison.
     * `achat.ot_transport` / `ot_transport_bl` : suivi maritime FUSEAU,
       conteneur vers BL, ETA, transitaire.
@@ -260,7 +265,7 @@ class DWHRepository:
                    coalesce(k.commande_commande_ouverte, '') as ouverte,
                    k.commande_sup_etd_confirme as etd_confirme,
                    k.commande_creee_le
-            from public.commandes_detaillees27 k
+            from public.commandes_detaillees k
             left join public.fournisseurs2 f
                    on f.id_fournisseur = k.frn_id_fournisseur
             where k.article_id_article = :id_article
