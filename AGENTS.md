@@ -1,65 +1,70 @@
-# fiche_de_controle — Contexte Codex
+# fiche_de_controle : contexte Codex
 
 ## Rôle
-Qualité / Packing — génération automatique de fiches de contrôle réception.
-Livrable : exécutable .exe Windows (PyInstaller) déployé sur le partage
-`A:\QUALITE\R4 ACHATS\Contrôle réception\...`, utilisé par Flo (service qualité).
+Qualité / réception : génération des fiches de contrôle réception (gabarit FOR-ACH-30-2) à partir
+d'un code scanné à la douchette. Utilisé par Flo (service qualité).
 
-## Statut
-**Production**, fiabilisation en cours. Voir
-`claude/.ai_memory/decisions_log/20260902_fiche_controle_fiabilisation.md`.
+## Statut (09/10/2026)
+- **En production** : `Scanner_Qualite.exe` du 28/04 sur `A:\QUALITE\R4 ACHATS\Contrôle réception\2026\Contrôle TB`.
+- **En cours** : bascule vers une **Web App Azure** (`app-shsv-fichectrl-prod`, plan FUSEAU). Le code et la CI sont
+  livrés, l'infra reste à appliquer par Antho.
+- **Reprendre par** `docs/20261009_Point_de_reprise.md` (actions dans l'ordre, pièges).
+- Décisions : `claude/.ai_memory/decisions_log/20261009_fiche_controle_webapp_azure.md` (Web App) et
+  `20260902_fiche_controle_fiabilisation.md` (codes carton, DWH).
 
 ## Stack
-- Python 3.11 · API Sylob · extraction PDF · OCR local · génération Excel
-- PyInstaller (compilation .exe), local uniquement (pas d'Azure Function)
+Python 3.11 · FastAPI et une page HTML (design system TB) · API Sylob · DWH `dtpf_sylob_prod` · RapidOCR puis
+Gemini (Vertex AI) · openpyxl · Terraform (Azure App Service) · GitHub Actions (OIDC). L'exe PyInstaller reste
+buildable (`build_exe.bat`).
 
 ## Structure
 ```
-src/     # flat — pas de sous-dossiers
-├── sylob_api.py       # Client API Sylob (credentials Key Vault)
-├── code_resolver.py   # Résolution du code scanné (EAN13 / EAN14 PCB-SPCB / réf)
-├── ocr_engine.py      # Texte natif -> cache -> OCR local (eng+fra+chi_sim)
-├── pdf_extractor.py   # Parsing des Packing Lists par format fournisseur
-├── excel_handler.py   # Génération Excel
-├── data_loader.py     # Référentiel article
-└── scanner_app.py     # Boucle de scan (CLI douchette)
-scripts/  # diagnostic_codes.py, diagnostic_pl.py, migrer_secrets_sylob.py,
-          # preparer_ocr_portable.ps1
-tests/    # non-régression de la résolution des codes (pytest)
-tools/    # binaires OCR portables, non versionnés, livrés dans le zip
+src/      # flat
+├── web_app.py           # FastAPI : /, /api/scan, /api/fiches, /api/lot, /api/packing-lists, /api/health
+├── static/              # index.html (design system TB), logo et favicon officiels
+├── reception_service.py # Coeur métier sans input() : proposer, arbitrer, générer
+├── config.py            # Config centralisée (variables d'environnement)
+├── depot_fichiers.py    # Dépôt local | SMB (SRV-FILES-POM) ; depot_drive.py : Drive partagé
+├── dwh_repository.py    # articles3, commandes_detaillees, tracabilite, achat.ot_transport (lecture seule)
+├── sylob_api.py         # RECEPTIONAPI : lot temps réel du PO retenu
+├── ocr_engine.py        # Texte natif -> cache -> RapidOCR -> tesseract
+├── lecteur_gemini.py    # Repli Gemini (lignes structurées, cache, label app=fiche-controle)
+├── gcp_auth.py / azure_auth.py
+├── pdf_extractor.py · code_resolver.py · excel_handler.py · data_loader.py
+├── scanner_app.py       # Ancienne boucle console (exe) ; preflight.py : --verifier-poste
+deploy/webapp/  # Terraform, deployer_infra.ps1, appliquer_role_fichectrl.py, README (runbook)
+deploy/gcp/     # creer_projet_fichectrl.ps1
+.github/workflows/deploy-azure.yml  # tests, puis déploiement si vars.DEPLOIEMENT_ACTIF == 'true'
+docs/           # point de reprise, recette Flo, tickets GLPI
+tests/          # pytest (33)
 ```
 
-## Credentials
-Secret **unique** `tb-sylob-client` dans **`kv-dtpf-prod`** (charge utile JSON :
-`user`, `password`, `unite_pers`, `session_id`, `base_url1`, `base_url`).
-Source de vérité partagée avec MyReport et tout futur connecteur Sylob, cf.
-skill `tb-data-socle-commun` §4. Un nom de secret Key Vault n'accepte pas
-d'underscore, donc le nom réel est `tb-sylob-client` et non `tb_sylob_client`.
-Replis dégradés, dans l'ordre : ancien vault `kv-tb-ia-agents-secrets` (secrets
-unitaires `SYLOB-*`), puis `.env` local. **Le `.env` n'est plus déployé.**
+## Sources de données (ordre)
+Packing List (simple indice) → **DWH** (choisit le PO : `public.commandes_detaillees`, jamais les tables
+numérotées figées) → **API Sylob** (lot du PO, temps réel) → CSV historique. Interroger Sylob par le seul EAN
+rend une réception quelconque : interdit.
 
-## ⚠️ Alertes actives
-- Le référentiel article vient encore de `0_Modele_Et_Donnees/article.csv`
-  (8874 lignes, maintenu à la main). Cible : `public.articles3` du DWH via une
-  dimension conforme `ref.article`. **Ne jamais pointer ce projet sur `achat.*`
-  en direct** (gouvernance des schémas, socle §2).
-- PO / lot / fournisseur doivent basculer sur `psql-dtpf-psql-prod`
-  (`commandes_detaillees`, `tracabilite`, `achat.ot_transport`) : les regex
-  par format fournisseur plafonnent à 11 Packing Lists exploitables sur 19.
-- OCR : exige `tools/tesseract` (langues eng, fra, chi_sim) et `tools/poppler`.
-  Sans eux, les Packing Lists scannées sont inexploitables, et l'application le
-  dit maintenant explicitement au démarrage.
-- `pdf_extractor.py` : doublon partiel avec `Rapport_Apave_Corim/src/pdf_extractor.py`
-  → extraire en lib `tb_document_ai`.
-- Le `.env` historique reste à supprimer du partage `A:\QUALITE\...`.
+## Credentials (noms uniquement)
+- `kv-dtpf-prod` :
+  - `tb-sylob-client` (JSON Sylob) ;
+  - `psql-prod-fichectrl-app-login` / `-password` (rôle `dtpf_fichectrl_app_prod`, lecture seule, 6 tables) ;
+  - `gcp-fichectrl-sa-key` (compte `compteserve@qualitefichecontrole.iam.gserviceaccount.com`) ;
+  - `svc-fichectrl-ad-login` / `-password` (à venir, ticket Alban).
+- GCP : projet `qualitefichecontrole`. Drive partagé « Fiche de Controle » `0ACZ6_BwnqSS_Uk9PVA`.
+- Infra appliquée sous **`abezille@tbgroupefr.onmicrosoft.com`** (profil `$HOME\.azure-admin`), jamais sous
+  `a.bezille@tb-groupe.fr` : pas de MFA en CLI, pas d'accès au state.
+
+## Alertes actives
+- `opencv-python` (non headless) interdit sur App Service (libGL) : la CI construit `.python_packages` et le
+  vérifie.
+- La cellule H6 (lot fournisseur) sort du gabarit : validation qualité requise à la recette.
+- La bascule MyReport `public` → `myreport` imposera de repointer les tables et de rejouer
+  `appliquer_role_fichectrl.py`.
+- `.env` et exe historiques à retirer de `A:\QUALITE\...` après le go de Flo (accord écrit).
+- `pdf_extractor.py` : doublon partiel avec `Rapport_Apave_Corim`, à extraire dans une bibliothèque commune.
 
 ## Standards TB Groupe
-- Python 3.11, type hints partout, fonctions max 50 lignes
-- `get_base_path()` obligatoire (le .exe PyInstaller change le chemin courant)
-- `logger = logging.getLogger(__name__)`, messages balisés
-  `[SUCCES]` / `[ECHEC]` / `[INFO]` / `[ATTENTION]` — jamais de `print()`
-  hors sortie CLI destinée à l'opérateur
-- Zéro credential en dur, zéro `.env` sur un partage réseau
-- Un échec ne doit JAMAIS être silencieux : zéro article extrait est un `[ECHEC]`
-  nommé, jamais un `[SUCCES]`
-- Jamais de tiret cadratin, ni dans le code ni dans les logs
+- Python 3.11, type hints, fonctions de 50 lignes au plus, `Config` centralisée.
+- `logger = logging.getLogger(__name__)`, messages `[SUCCES]` / `[ECHEC]` / `[INFO]` / `[ATTENTION]`.
+- Zéro credential en dur, zéro `.env` sur un partage. Un échec n'est jamais silencieux.
+- Jamais de tiret cadratin.
